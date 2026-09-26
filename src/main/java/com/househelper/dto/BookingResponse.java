@@ -18,6 +18,7 @@ public class BookingResponse {
 
     private Long id;
     private Long seriesId;
+    private Long paymentId;
     private Long customerId;
     private Long assignedHelperId;
     private String locality;

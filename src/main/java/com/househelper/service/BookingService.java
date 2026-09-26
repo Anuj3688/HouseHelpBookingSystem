@@ -111,6 +111,38 @@ public class BookingService {
                         ? null : booking.getBookingSeries().getId(), eventPayload);
     }
 
+    @Transactional
+    public void confirmBookingAfterPaymentSuccess(Long bookingId, Long paymentId) {
+        Booking booking = requireBooking(bookingId);
+        if (booking.getStatus() == BookingStatus.CANCELLED) {
+            Optional<Payment> refund;
+            Long seriesId = booking.getBookingSeries() == null ? null : booking.getBookingSeries().getId();
+            if (seriesId == null) {
+                refund = paymentRecordService.createCancellationRefund(bookingId, null, null);
+            } else {
+                refund = paymentRecordService.createSeriesCancellationRefund(
+                        seriesId, List.of());
+            }
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("capturedPaymentId", paymentId);
+            payload.put("refundPaymentId", refund.map(Payment::getId).orElse(null));
+            eventPublisherService.publishEvent("PAYMENT_SUCCEEDED_AFTER_BOOKING_CANCELLATION", "Booking",
+                    booking.getId().toString(), booking.getAssignedHelperId(), booking.getCustomer().getId(),
+                    paymentId, booking.getId(), seriesId, payload);
+            return;
+        }
+        if (booking.getStatus() != BookingStatus.PENDING_PAYMENT) {
+            return;
+        }
+
+        booking.setStatus(BookingStatus.CONFIRMED);
+        bookingRepository.save(booking);
+        eventPublisherService.publishEvent("BOOKING_CONFIRMED_AFTER_PAYMENT", "Booking",
+                booking.getId().toString(), booking.getAssignedHelperId(), booking.getCustomer().getId(),
+                paymentId, booking.getId(), booking.getBookingSeries() == null
+                        ? null : booking.getBookingSeries().getId(), toResponse(booking));
+    }
+
     private BookingResponse createBookingAttempt(BookingRequest request) {
         return transactionTemplate.execute(status -> createBookingInTransaction(request, null));
     }
@@ -138,7 +170,7 @@ public class BookingService {
                 .startTime(request.getStartTime())
                 .endTime(request.getEndTime())
                 .totalAmount(amount.doubleValue())
-                .status(BookingStatus.CONFIRMED)
+                .status(BookingStatus.PENDING_PAYMENT)
                 .build();
         bookingRepository.save(booking);
         Payment payment = paymentRecordService.createBookingPayment(
@@ -181,6 +213,9 @@ public class BookingService {
     private void validateCanReschedule(Booking booking, RescheduleRequest request) {
         if (booking.getStatus() == BookingStatus.CANCELLED) {
             throw new ConflictException("A cancelled booking cannot be rescheduled.");
+        }
+        if (booking.getStatus() == BookingStatus.PENDING_PAYMENT) {
+            throw new ConflictException("A booking cannot be rescheduled until its payment is successful.");
         }
         if (booking.getBookingDate().equals(request.getNewBookingDate())
                 && booking.getStartTime().equals(request.getNewStartTime())
@@ -234,6 +269,7 @@ public class BookingService {
                                            Function<BookingResponse, Object> eventPayloadFactory) {
         bookingRepository.save(booking);
         BookingResponse response = toResponse(booking);
+        response.setPaymentId(paymentId);
         eventPublisherService.publishEvent(eventType, "Booking", booking.getId().toString(),
                 booking.getAssignedHelperId(), booking.getCustomer().getId(), paymentId, booking.getId(),
                 booking.getBookingSeries() == null ? null : booking.getBookingSeries().getId(),

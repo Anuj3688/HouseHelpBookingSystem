@@ -7,13 +7,18 @@ import com.househelper.exception.ConflictException;
 import com.househelper.exception.ResourceNotFoundException;
 import com.househelper.model.Booking;
 import com.househelper.model.Customer;
+import com.househelper.model.Payment;
+import com.househelper.model.PaymentType;
 import com.househelper.repository.BookingRepository;
 import com.househelper.repository.CustomerRepository;
+import com.househelper.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -21,6 +26,7 @@ public class CustomerService {
 
     private final CustomerRepository customerRepository;
     private final BookingRepository bookingRepository;
+    private final PaymentRepository paymentRepository;
 
     @Transactional
     public CustomerResponse createCustomer(CustomerRequest request) {
@@ -44,9 +50,15 @@ public class CustomerService {
     @Transactional(readOnly = true)
     public List<BookingResponse> getCustomerBookings(Long customerId) {
         requireCustomer(customerId);
-        return bookingRepository.findByCustomer_IdOrderByBookingDateAscStartTimeAsc(customerId)
-                .stream()
-                .map(this::toBookingResponse)
+        List<Booking> bookings = bookingRepository.findByCustomer_IdOrderByBookingDateAscStartTimeAsc(customerId);
+        Map<Long, Long> initialPaymentIds = bookings.isEmpty()
+                ? Map.of()
+                : paymentRepository.findByBookingIdIn(bookings.stream().map(Booking::getId).toList())
+                        .stream()
+                        .filter(payment -> payment.getPaymentType() == PaymentType.BOOKING_PAYMENT)
+                        .collect(Collectors.toMap(Payment::getBookingId, Payment::getId, Long::min));
+        return bookings.stream()
+                .map(booking -> toBookingResponse(booking, initialPaymentIds.get(booking.getId())))
                 .toList();
     }
 
@@ -80,10 +92,11 @@ public class CustomerService {
                 .build();
     }
 
-    private BookingResponse toBookingResponse(Booking booking) {
+    private BookingResponse toBookingResponse(Booking booking, Long paymentId) {
         return BookingResponse.builder()
                 .id(booking.getId())
                 .seriesId(booking.getBookingSeries() == null ? null : booking.getBookingSeries().getId())
+                .paymentId(paymentId)
                 .customerId(booking.getCustomer().getId())
                 .assignedHelperId(booking.getAssignedHelperId())
                 .locality(booking.getLocality())

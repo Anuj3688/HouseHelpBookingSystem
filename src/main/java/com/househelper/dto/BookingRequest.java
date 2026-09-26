@@ -1,6 +1,7 @@
 package com.househelper.dto;
 
 import com.househelper.model.SkillType;
+import com.househelper.model.PaymentMethod;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -37,6 +38,6 @@ public class BookingRequest {
     @NotNull
     private LocalTime endTime;
 
-    @NotBlank
-    private String paymentMethod;
+    @NotNull
+    private PaymentMethod paymentMethod;
 }

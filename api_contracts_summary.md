@@ -137,7 +137,7 @@ The available-helper and available-slot endpoints do not filter by date, localit
 }
 ```
 
-The customer ID must refer to an existing customer. The system selects an available helper for the exact date and time, ordered by lowest hourly rate and then highest rating. The slot is protected with optimistic locking and the booking operation retries up to three times on optimistic-lock conflicts. The initial payment is recorded with status `PENDING`.
+The customer ID must refer to an existing customer. The system selects an available helper for the exact date and time, ordered by lowest hourly rate and then highest rating. The slot is protected with optimistic locking and the booking operation retries up to three times on optimistic-lock conflicts. `paymentMethod` accepts `CARD`, `UPI`, or `WALLET`. The selected method-specific processor creates a pending payment record with a mock provider reference. The booking remains `PENDING_PAYMENT` until the payment succeeds; payment failure cancels the booking and releases its slot. The response includes the booking's `paymentId`.
 
 ### Reschedule or cancel a booking
 
@@ -150,7 +150,7 @@ When rescheduling, a positive price difference creates a `RESCHEDULE_PAYMENT`; a
 
 ### Create and cancel a weekly booking series
 
-`POST /api/booking-series` creates a weekly series for a required number of occurrences (1–52). Every requested date uses the same weekday and time. Available occurrences are booked independently; dates without an available helper are returned in `unavailableDates` without discarding successful bookings.
+`POST /api/booking-series` creates a weekly series for a required number of occurrences (1–52). Every requested date uses the same weekday and time. Available occurrences are booked independently; dates without an available helper are returned in `unavailableDates` without discarding successful bookings. Each created occurrence receives its own `BOOKING_PAYMENT`, using the selected method, and each returned booking includes its own `paymentId`; payment success or failure is handled independently per occurrence.
 
 ```json
 {
@@ -165,13 +165,13 @@ When rescheduling, a positive price difference creates a `RESCHEDULE_PAYMENT`; a
 }
 ```
 
-The response contains `seriesId`, the created booking responses (each has that `seriesId`), and unavailable dates. To cancel only one occurrence, use `POST /api/bookings/{bookingId}/cancel`. To cancel the entire series, use `POST /api/booking-series/{seriesId}/cancel`; all active occurrence slots are released and one pending refund is created for the remaining successful charges across those occurrences. The initial `FullRefundCancellationPolicy` is replaceable through the `CancellationRefundPolicy` interface.
+The response contains `seriesId`, the created booking responses (each has that `seriesId` and its payment ID), and unavailable dates. To cancel only one occurrence, use `POST /api/bookings/{bookingId}/cancel`. To cancel the entire series, use `POST /api/booking-series/{seriesId}/cancel`; all active occurrence slots are released and one pending refund is created for the remaining successful charges across those occurrences. The initial `FullRefundCancellationPolicy` is replaceable through the `CancellationRefundPolicy` interface.
 
 ## Mock payments
 
-Payment records include a `paymentType`: `BOOKING_PAYMENT`, `RESCHEDULE_PAYMENT`, `CANCEL_REFUND`, or `RESCHEDULE_REFUND`. Refund records have their own IDs and optionally point to the original charge using `relatedPaymentId`; source payment records are not overwritten.
+Payment records include a `paymentType`: `BOOKING_PAYMENT`, `RESCHEDULE_PAYMENT`, `CANCEL_REFUND`, or `RESCHEDULE_REFUND`. Refund records have their own IDs and optionally point to the original charge using `relatedPaymentId`; source payment records are not overwritten. `paymentMethod` is selected through the common `PaymentMethodProcessor` strategy, with mock adapters for `CARD`, `UPI`, and `WALLET`. Responses include a unique mock `providerReference` for tracing. New payment methods can be added by registering a processor for the method.
 
-Payment records are created as `PENDING` when a booking is created. To simulate a payment-provider result for a charge or refund request, use:
+Payment records are created as `PENDING` when a booking is created. Each includes a unique `providerReference`; `GET /api/payments/{paymentId}` returns that value along with the payment method, amount, and status. To simulate a payment-provider result for a charge or refund request, use:
 
 `PATCH /api/payments/{paymentId}/status`
 
@@ -181,7 +181,7 @@ Payment records are created as `PENDING` when a booking is created. To simulate 
 }
 ```
 
-The accepted outcomes are `SUCCESS` and `FAILED`. Only a `PENDING` payment can be updated this way; an already completed payment returns `409 Conflict`. For refund-type records, these outcomes represent the simulated refund result. `GET /api/payments/{paymentId}` retrieves one payment record, including its type and related payment ID. A status update also writes a `PAYMENT_STATUS_UPDATED` audit event. This endpoint simulates provider results; it does not charge or refund money.
+The accepted outcomes are `SUCCESS` and `FAILED`. Only a `PENDING` payment can be updated this way; an already completed payment returns `409 Conflict`. For refund-type records, these outcomes represent the simulated refund result. `GET /api/payments/{paymentId}` retrieves one payment record, including its type and related payment ID. A status update also writes a `PAYMENT_STATUS_UPDATED` audit event. This endpoint simulates provider results; it does not charge or refund money. The current `WALLET` adapter is a mock payment channel, not a stored-value wallet or wallet-balance implementation.
 
 ## Error responses
 

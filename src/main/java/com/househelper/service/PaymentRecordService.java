@@ -1,9 +1,13 @@
 package com.househelper.service;
 
 import com.househelper.model.Payment;
+import com.househelper.model.PaymentMethod;
 import com.househelper.model.PaymentStatus;
 import com.househelper.model.PaymentType;
 import com.househelper.repository.PaymentRepository;
+import com.househelper.service.payment.PaymentInitiationResult;
+import com.househelper.service.payment.PaymentMethodProcessorRegistry;
+import com.househelper.exception.ConflictException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,14 +22,15 @@ public class PaymentRecordService {
 
     private final PaymentRepository paymentRepository;
     private final CancellationRefundPolicy cancellationRefundPolicy;
+    private final PaymentMethodProcessorRegistry paymentMethodProcessorRegistry;
 
     @Transactional
-    public Payment createBookingPayment(Long bookingId, BigDecimal amount, String paymentMethod) {
+    public Payment createBookingPayment(Long bookingId, BigDecimal amount, PaymentMethod paymentMethod) {
         return createBookingPayment(bookingId, null, amount, paymentMethod);
     }
 
     @Transactional
-    public Payment createBookingPayment(Long bookingId, Long seriesId, BigDecimal amount, String paymentMethod) {
+    public Payment createBookingPayment(Long bookingId, Long seriesId, BigDecimal amount, PaymentMethod paymentMethod) {
         return savePayment(bookingId, seriesId, amount, paymentMethod, PaymentType.BOOKING_PAYMENT, null);
     }
 
@@ -45,7 +50,10 @@ public class PaymentRecordService {
                 .filter(payment -> payment.getPaymentType() == PaymentType.BOOKING_PAYMENT)
                 .findFirst()
                 .orElse(null);
-        String paymentMethod = sourcePayment == null ? "UNSPECIFIED" : sourcePayment.getPaymentMethod();
+        if (sourcePayment == null) {
+            throw new ConflictException("Cannot determine the payment method for this reschedule adjustment.");
+        }
+        PaymentMethod paymentMethod = sourcePayment.getPaymentMethod();
         PaymentType paymentType = delta.signum() > 0
                 ? PaymentType.RESCHEDULE_PAYMENT
                 : PaymentType.RESCHEDULE_REFUND;
@@ -69,9 +77,10 @@ public class PaymentRecordService {
 
     @Transactional
     public Optional<Payment> createSeriesCancellationRefund(Long seriesId, List<Long> bookingIds) {
-        List<Payment> payments = bookingIds.isEmpty()
-                ? List.of()
-                : paymentRepository.findByBookingIdIn(bookingIds);
+        List<Payment> payments = paymentRepository.findByBookingSeriesId(seriesId);
+        if (payments.isEmpty() && !bookingIds.isEmpty()) {
+            payments = paymentRepository.findByBookingIdIn(bookingIds);
+        }
         return createCancellationRefund(payments, null, seriesId, null);
     }
 
@@ -98,7 +107,7 @@ public class PaymentRecordService {
             return Optional.empty();
         }
 
-        String paymentMethod = successfulCharges.getFirst().getPaymentMethod();
+        PaymentMethod paymentMethod = successfulCharges.getFirst().getPaymentMethod();
         Long relatedPaymentId = successfulCharges.size() == 1
                 ? successfulCharges.getFirst().getId()
                 : null;
@@ -111,15 +120,18 @@ public class PaymentRecordService {
         return paymentRepository.findByBookingId(bookingId);
     }
 
-    private Payment savePayment(Long bookingId, Long seriesId, BigDecimal amount, String paymentMethod,
+    private Payment savePayment(Long bookingId, Long seriesId, BigDecimal amount, PaymentMethod paymentMethod,
                                 PaymentType paymentType, Long relatedPaymentId) {
+        PaymentInitiationResult initiation = paymentMethodProcessorRegistry.initiate(
+                paymentMethod, paymentType, amount);
         return paymentRepository.save(Payment.builder()
                 .bookingId(bookingId)
                 .bookingSeriesId(seriesId)
+                .providerReference(initiation.providerReference())
                 .paymentType(paymentType)
                 .relatedPaymentId(relatedPaymentId)
                 .amount(amount.doubleValue())
-                .paymentMethod(paymentMethod.trim())
+                .paymentMethod(paymentMethod)
                 .paymentStatus(PaymentStatus.PENDING)
                 .build());
     }

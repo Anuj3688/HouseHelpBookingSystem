@@ -9,7 +9,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.AllArgsConstructor;
@@ -35,6 +34,9 @@ public class Payment {
     @Column(name = "booking_series_id")
     private Long bookingSeriesId;
 
+    @Column(name = "provider_reference")
+    private String providerReference;
+
     @NotNull
     @Enumerated(EnumType.STRING)
     @Column(name = "payment_type", nullable = false)
@@ -48,9 +50,10 @@ public class Payment {
     @Column(nullable = false)
     private Double amount;
 
-    @NotBlank
+    @NotNull
+    @Enumerated(EnumType.STRING)
     @Column(name = "payment_method", nullable = false)
-    private String paymentMethod;
+    private PaymentMethod paymentMethod;
 
     @NotNull
     @Enumerated(EnumType.STRING)

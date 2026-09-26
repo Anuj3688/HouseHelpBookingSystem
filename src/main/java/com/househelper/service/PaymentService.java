@@ -41,8 +41,12 @@ public class PaymentService {
 
         payment.setPaymentStatus(requestedStatus);
         PaymentResponse response = toResponse(paymentRepository.save(payment));
-        if (requestedStatus == PaymentStatus.FAILED && payment.getPaymentType() == PaymentType.BOOKING_PAYMENT) {
-            bookingService.cancelBookingAfterPaymentFailure(payment.getBookingId(), payment.getId());
+        if (payment.getPaymentType() == PaymentType.BOOKING_PAYMENT) {
+            if (requestedStatus == PaymentStatus.FAILED) {
+                bookingService.cancelBookingAfterPaymentFailure(payment.getBookingId(), payment.getId());
+            } else if (requestedStatus == PaymentStatus.SUCCESS) {
+                bookingService.confirmBookingAfterPaymentSuccess(payment.getBookingId(), payment.getId());
+            }
         }
         eventPublisherService.publishEvent("PAYMENT_STATUS_UPDATED", "Payment",
                 payment.getId().toString(), null, null, payment.getId(), payment.getBookingId(),
@@ -60,6 +64,7 @@ public class PaymentService {
                 .id(payment.getId())
                 .bookingId(payment.getBookingId())
                 .bookingSeriesId(payment.getBookingSeriesId())
+                .providerReference(payment.getProviderReference())
                 .paymentType(payment.getPaymentType())
                 .relatedPaymentId(payment.getRelatedPaymentId())
                 .amount(payment.getAmount())

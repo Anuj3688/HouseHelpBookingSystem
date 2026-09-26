@@ -74,7 +74,7 @@ The combination of helper, date, and start time is unique. Availability accepts 
 | `status` | `BookingStatus` | Required enum string. |
 | `version` | `Long` | JPA `@Version` optimistic locking field. |
 
-`BookingStatus` values: `CONFIRMED`, `CANCELLED`, `RESCHEDULED`.
+`BookingStatus` values: `PENDING_PAYMENT`, `CONFIRMED`, `CANCELLED`, `RESCHEDULED`. A new booking is pending while its booking payment is pending; successful payment confirms it and a failed booking payment cancels it and releases the slot.
 
 ## `BookingSeries`
 
@@ -97,6 +97,7 @@ The `POST /api/booking-series` operation independently attempts the start date a
 | `id` | `Long` | Generated identity primary key. |
 | `bookingId` | `Long` | Optional booking ID; null for a series-level consolidated refund. |
 | `bookingSeriesId` | `Long` | Optional series ID for tracing payments associated with a recurring occurrence or series refund. |
+| `providerReference` | `String` | Optional reference returned by the selected payment processor; current mock processors generate a unique local reference. |
 | `paymentType` | `PaymentType` | Required enum string: `BOOKING_PAYMENT`, `RESCHEDULE_PAYMENT`, `CANCEL_REFUND`, or `RESCHEDULE_REFUND`. |
 | `relatedPaymentId` | `Long` | Optional ID of the original charge for which this refund record was created. |
 | `amount` | `Double` | Required; non-negative. |
@@ -104,7 +105,7 @@ The `POST /api/booking-series` operation independently attempts the start date a
 | `paymentStatus` | `PaymentStatus` | Required enum string. |
 | `version` | `Long` | JPA `@Version` field. |
 
-`PaymentStatus` values: `PENDING`, `SUCCESS`, `FAILED`, `REFUNDED` (the last value is retained for compatibility with older records). Cancellation creates at most one pending refund record per cancellation operation for the remaining refundable balance, and negative reschedule adjustments create a separate pending refund record; original payment records are not overwritten. The mock payment resource allows pending charges and refund requests to transition to `SUCCESS` or `FAILED`. These are database state transitions only; no real provider is connected. Weekly booking series are modeled by `BookingSeries`; the initial full-refund behavior is implemented by the replaceable `CancellationRefundPolicy`.
+`PaymentStatus` values: `PENDING`, `SUCCESS`, `FAILED`, `REFUNDED` (the last value is retained for compatibility with older records). `PaymentMethod` values are `CARD`, `UPI`, and `WALLET`. Each has a `PaymentMethodProcessor`; the current implementations create mock references and pending records, not real payment transactions. Cancellation creates at most one pending refund record per cancellation operation for the remaining refundable balance, and negative reschedule adjustments create a separate pending refund record; original payment records are not overwritten. The mock payment resource allows pending charges and refund requests to transition to `SUCCESS` or `FAILED`. Weekly booking series are modeled by `BookingSeries`; each successfully allocated occurrence has an independent `BOOKING_PAYMENT`. The initial full-refund behavior is implemented by the replaceable `CancellationRefundPolicy`.
 
 ## `SystemEvent`
 

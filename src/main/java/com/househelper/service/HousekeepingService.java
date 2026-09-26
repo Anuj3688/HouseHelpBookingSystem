@@ -11,6 +11,7 @@ import com.househelper.model.Booking;
 import com.househelper.model.Helper;
 import com.househelper.model.HelperAvailability;
 import com.househelper.model.Payment;
+import com.househelper.model.PaymentType;
 import com.househelper.repository.BookingRepository;
 import com.househelper.repository.CustomerRepository;
 import com.househelper.repository.HelperAvailabilityRepository;
@@ -25,6 +26,7 @@ import java.util.LinkedHashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -72,8 +74,14 @@ public class HousekeepingService {
 
     @Transactional(readOnly = true)
     public List<BookingResponse> getAllBookings() {
-        return bookingRepository.findAll().stream()
-                .map(this::toBookingResponse)
+        List<Booking> bookings = bookingRepository.findAll();
+        Map<Long, Long> initialPaymentIds = bookings.isEmpty()
+                ? Map.of()
+                : paymentRepository.findByBookingIdIn(bookings.stream().map(Booking::getId).toList()).stream()
+                        .filter(payment -> payment.getPaymentType() == PaymentType.BOOKING_PAYMENT)
+                        .collect(Collectors.toMap(Payment::getBookingId, Payment::getId, Long::min));
+        return bookings.stream()
+                .map(booking -> toBookingResponse(booking, initialPaymentIds.get(booking.getId())))
                 .toList();
     }
 
@@ -119,9 +127,11 @@ public class HousekeepingService {
                 .build();
     }
 
-    private BookingResponse toBookingResponse(Booking booking) {
+    private BookingResponse toBookingResponse(Booking booking, Long paymentId) {
         return BookingResponse.builder()
                 .id(booking.getId())
+                .seriesId(booking.getBookingSeries() == null ? null : booking.getBookingSeries().getId())
+                .paymentId(paymentId)
                 .customerId(booking.getCustomer().getId())
                 .assignedHelperId(booking.getAssignedHelperId())
                 .locality(booking.getLocality())
@@ -139,6 +149,7 @@ public class HousekeepingService {
                 .id(payment.getId())
                 .bookingId(payment.getBookingId())
                 .bookingSeriesId(payment.getBookingSeriesId())
+                .providerReference(payment.getProviderReference())
                 .paymentType(payment.getPaymentType())
                 .relatedPaymentId(payment.getRelatedPaymentId())
                 .amount(payment.getAmount())
