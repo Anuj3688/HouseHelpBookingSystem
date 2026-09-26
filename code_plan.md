@@ -1,182 +1,110 @@
-# Maid Booking System: Full Code Implementation Plan and Blueprint
+# HoseHelpBookingSystem: Implemented Backend Overview
 
-## 1. System Overview and Technology Stack
+This document summarizes the current implementation. API request/response details are in `api_contracts_summary.md`; entity field details are in `database_core_entities_specification.md`.
 
-- **Language:** Java 17+
-- **Framework:** Spring Boot 3.x (Spring Web, Spring Data JPA, Spring Validation)
-- **Database:** H2 in-memory database
-- **Architecture:** Layered monolith with transactional outbox event auditing
-- **Concurrency control:** Optimistic locking (`@Version`) with a three-retry loop for maid booking auto-allocation
+## Technology
 
-## 2. Package Structure and Directory Layout
+- Java 21
+- Spring Boot 3.2.5
+- Spring Web MVC, Spring Data JPA, Jakarta Validation
+- H2 in-memory database
+- Lombok
+- Springdoc OpenAPI / Swagger UI
+
+## Package layout
 
 ```text
-com.example.maidbooking/
-├── MaidBookingApplication.java
-├── config/
-│   └── AppConfig.java                 # Jackson ObjectMapper and security/encryption beans
+com.househelper/
+├── HoseHelpBookingSystemApplication.java
 ├── converter/
-│   └── EncryptedStringConverter.java  # AES/custom encryption for PII (government ID)
-├── exception/
-│   ├── GlobalExceptionHandler.java    # Centralized @ControllerAdvice
-│   └── SlotUnavailableException.java  # Custom runtime exception for conflict handling
-├── model/                             # Already specified in database_core_entities.md
-│   ├── Maid.java
-│   ├── MaidAvailability.java
-│   ├── Booking.java
-│   ├── Payment.java
-│   └── SystemEvent.java
-├── repository/
-│   ├── MaidRepository.java
-│   ├── MaidAvailabilityRepository.java
-│   ├── BookingRepository.java
-│   ├── PaymentRepository.java
-│   └── SystemEventRepository.java
+│   └── EncryptedStringConverter.java
 ├── dto/
-│   ├── MaidOnboardRequest.java
+│   ├── AvailableSlotResponse.java
 │   ├── AvailabilityRequest.java
-│   ├── MaidSearchResponse.java
 │   ├── BookingRequest.java
 │   ├── BookingResponse.java
+│   ├── CustomerRequest.java
+│   ├── CustomerResponse.java
+│   ├── HelperOnboardRequest.java
+│   ├── HelperSearchResponse.java
 │   └── RescheduleRequest.java
-├── service/
-│   ├── MaidService.java
-│   ├── BookingService.java
-│   ├── PaymentService.java
-│   └── EventPublisherService.java
-└── controller/
-    ├── MaidController.java
-    └── BookingController.java
+├── exception/
+│   ├── ConflictException.java
+│   ├── GlobalExceptionHandler.java
+│   ├── InvalidRequestException.java
+│   ├── ResourceNotFoundException.java
+│   └── SlotUnavailableException.java
+├── model/
+│   ├── AvailabilityStatus.java
+│   ├── Booking.java
+│   ├── BookingStatus.java
+│   ├── Customer.java
+│   ├── Helper.java
+│   ├── HelperAvailability.java
+│   ├── Payment.java
+│   ├── PaymentStatus.java
+│   ├── SkillType.java
+│   └── SystemEvent.java
+├── repository/
+│   ├── BookingRepository.java
+│   ├── CustomerRepository.java
+│   ├── HelperAvailabilityRepository.java
+│   ├── HelperRepository.java
+│   ├── PaymentRepository.java
+│   └── SystemEventRepository.java
+├── resources/
+│   ├── BookingResource.java
+│   ├── CustomerResource.java
+│   ├── HelperResource.java
+│   ├── HousekeepingResource.java
+│   └── HomeResource.java
+└── service/
+    ├── BookingService.java
+    ├── CustomerService.java
+    ├── EventPublisherService.java
+    ├── HelperService.java
+    └── HousekeepingService.java
 ```
 
-## 3. Core Component Specifications
+## Implemented behavior
 
-### A. Configuration and Security Converters
+### Customer management
 
-#### `EncryptedStringConverter.java`
+- Create, list, get, update, and delete customers under `/api/customers`.
+- Customer IDs are generated numeric IDs.
+- Booking creation requires a valid customer record.
+- Deleting a customer with booking history returns a conflict.
 
-**Purpose:** Implements `AttributeConverter` to transparently encrypt and decrypt sensitive fields, such as `governmentIdProof`, at rest using JPA.
+### Helper and availability management
 
-**Methods:**
+- Onboard helpers with a unique phone number, up to three localities, skills, hourly rate, and encrypted government ID proof.
+- Add or update availability slots; invalid time ranges and overlaps are rejected.
+- Search helpers by locality and skill with pagination, ordered by lowest hourly rate and then highest rating.
 
-- `convertToDatabaseColumn(String attribute)`
-- `convertToEntityAttribute(String dbData)`
+### Booking lifecycle
 
-### B. Repositories (Data Access Layer)
+- Allocate an available helper for an exact slot, ordered by rate and rating.
+- Use optimistic locking and retry up to three times for concurrent modifications.
+- Create a booking and a pending payment record in one transaction.
+- Reschedule by reserving a new slot, releasing the old slot, updating the booking, and recording the price difference.
+- Cancel by releasing the slot, marking payments refunded, and updating the booking.
+- Simulate payment outcomes by transitioning pending payments to `SUCCESS` or `FAILED` through the payment resource.
+- Persist booking lifecycle audit events to `SystemEvent`.
 
-#### `MaidRepository.java`
+Payment/refund behavior is database bookkeeping only; no payment gateway or external refund workflow is integrated.
 
-Extends `JpaRepository`.
+### Housekeeping endpoints
 
-- `Optional findByPhone(String phone)`
-- `@Query Page searchMaids(String locality, SkillType skill, Pageable pageable)`
+- `GET /api/housekeeping/available-helpers` lists helpers with at least one slot marked `AVAILABLE`.
+- `GET /api/housekeeping/customers` lists registered customers.
+- `GET /api/housekeeping/available-slots` lists slots marked `AVAILABLE`.
+- `GET /api/payments/{paymentId}` retrieves a payment; `PATCH /api/payments/{paymentId}/status` simulates a pending payment outcome.
 
-#### `MaidAvailabilityRepository.java`
+These endpoints support local API exploration and test-data setup. Available listings are not filtered by a requested date.
 
-Extends `JpaRepository`.
+### Errors, logging, and API docs
 
-- `Optional findByMaidIdAndSlotDateAndStartTime(Long maidId, LocalDate slotDate, LocalTime startTime)`
-- `@Query List findAvailableMaidsForSlot(String locality, SkillType skill, LocalDate slotDate, LocalTime startTime)`
-  Results are sorted by `m.hourlyRate ASC`, then `m.rating DESC`.
-
-#### `BookingRepository.java`
-
-Extends `JpaRepository`.
-
-- `List findByCustomerId(String customerId)`
-- `List findByAssignedMaidId(Long assignedMaidId)`
-
-#### `PaymentRepository.java`
-
-Extends `JpaRepository`.
-
-- `Optional findByBookingId(Long bookingId)`
-
-#### `SystemEventRepository.java`
-
-Extends `JpaRepository`.
-
-### C. DTOs (Data Transfer Objects with Validation)
-
-#### `MaidOnboardRequest.java`
-
-- **Fields:** `name`, `phone`, `localities` (`Set`, maximum size 3), `skills` (`Set`), `hourlyRate`, `governmentIdProof`
-- **Annotations:** `@NotBlank`, `@NotNull`, `@Size(max = 3)`
-
-#### `AvailabilityRequest.java`
-
-**Fields:** `slotDate`, `startTime` (`LocalTime`), `endTime` (`LocalTime`), `status` (`AvailabilityStatus`)
-
-#### `BookingRequest.java`
-
-**Fields:** `customerId`, `locality`, `skill`, `bookingDate`, `startTime`, `endTime`, `paymentMethod`
-
-#### `RescheduleRequest.java`
-
-**Fields:** `newBookingDate`, `newStartTime`, `newEndTime`
-
-### D. Services (Core Business Logic)
-
-#### `EventPublisherService.java`
-
-**Responsibilities:** Persists domain event snapshots to the `system_events` table within the active transaction.
-
-**Method:**
-
-- `public void publishEvent(String eventType, String aggregateType, String aggregateId, Object payload)`
-
-#### `MaidService.java`
-
-**Responsibilities:** Handles maid onboarding, locality validation (maximum of 3), and schedule updates.
-
-**Methods:**
-
-- `Maid onboardMaid(MaidOnboardRequest request)`
-- `void updateAvailability(Long maidId, List requests)`
-- `Page searchMaids(String locality, SkillType skill, int page, int size, String sortBy)`
-
-#### `BookingService.java`
-
-**Responsibilities:** Implements lowest-price-first auto-allocation, a three-retry optimistic locking loop, rescheduling with price-delta calculation, and cancellations.
-
-**Core auto-allocation algorithm:**
-
-1. Query `MaidAvailabilityRepository.findAvailableMaidsForSlot(...)` for candidates sorted by `hourlyRate ASC`, then `rating DESC`.
-2. Loop through candidates, with up to three retries for concurrency protection:
-   1. Fetch the slot with `@Version`.
-   2. If the status is `AVAILABLE`, update it to `BOOKED`.
-   3. Catch `ObjectOptimisticLockingFailureException` and retry up to three times if another transaction claimed the slot.
-3. Create and save `Booking` and `Payment` records.
-4. Trigger `EventPublisherService.publishEvent("BOOKING_CREATED", ...)`.
-
-**Methods:**
-
-- `BookingResponse createBooking(BookingRequest request)`
-- `BookingResponse rescheduleBooking(Long bookingId, RescheduleRequest request)`
-- `BookingResponse cancelBooking(Long bookingId)`
-
-### E. REST Controllers
-
-#### `MaidController.java` (`/api/maids`)
-
-| Method | Endpoint | Description |
-| --- | --- | --- |
-| `POST` | `/onboard` | Registers a maid. |
-| `POST` | `/{maidId}/availability` | Bulk-updates one-hour slots. |
-| `GET` | `/search` | Paginated search by locality and skill. |
-
-#### `BookingController.java` (`/api/bookings`)
-
-| Method | Endpoint | Description |
-| --- | --- | --- |
-| `POST` | `/` | Auto-allocates and books a maid. |
-| `PUT` | `/{bookingId}/reschedule` | Reschedules an appointment and processes price-delta top-ups. |
-| `POST` | `/{bookingId}/cancel` | Cancels a booking and triggers refund workflows. |
-
-## 4. Exception Handling
-
-### `GlobalExceptionHandler.java`
-
-- Catches `SlotUnavailableException` or `ObjectOptimisticLockingFailureException` and maps them to HTTP `409 Conflict`.
-- Catches validation failures and maps them to HTTP `400 Bad Request`.
-- Catches resource-not-found errors and maps them to HTTP `404 Not Found`.
+- `GlobalExceptionHandler` maps validation errors to 400, missing records/resources to 404, conflicts to 409, and unexpected failures to 500.
+- Critical failures are logged; expected client errors and routine success paths are not logged at info level.
+- `/` redirects to Swagger UI at `/swagger-ui/index.html`; the OpenAPI document is at `/v3/api-docs`.
+- Missing static resources such as `/favicon.ico` return 404 rather than being reported as unexpected server errors.

@@ -1,318 +1,98 @@
-# Database Core Entities Specification (Maid Booking System)
+# Database Core Entities Specification
 
-## Overview
-This document defines the core relational database schema, entity attributes, primary/foreign keys, indices, and JPA configurations for the maid booking system. All entities are designed to run on an in-memory **H2 Database** using **Spring Data JPA**.
+This document reflects the entities currently implemented under `com.househelper.model` and persisted with Spring Data JPA in the H2 database.
 
----
+## Entity relationships
 
-## 1. Entity Relationship Diagram (Summary)
-* `Maid` (1) ──< (`MaidAvailability` (N)) [Tracks 1-hour slots per day]
-* `Maid` (1) ──< (`Booking` (N)) [Linked via assigned maid ID]
-* `Booking` (1) ──> (`Payment` (1)) [Tracks transaction status & payment gateway reference]
-* `Booking` / `Maid` / `Payment` ──> (`SystemEvent` (N)) [Transactional outbox / audit event logs]
-
----
-
-## 2. Core Entities
-
-### A. `Maid` Entity
-Stores static professional profile data, bounded localities (max 3), and encrypted identification documents.
-
-```java
-package com.example.maidbooking.model;
-
-import com.example.maidbooking.converter.EncryptedStringConverter;
-import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.Setter;
-import org.hibernate.annotations.CreationTimestamp;
-
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.util.Set;
-
-@Entity
-@Table(name = "maids", indexes = {
-    @Index(name = "idx_maid_rating", columnList = "rating"),
-    @Index(name = "idx_maid_rate", columnList = "hourlyRate")
-})
-@Getter
-@Setter
-public class Maid {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long maidId;
-
-    @Column(nullable = false, length = 100)
-    private String name;
-
-    @Column(nullable = false, unique = true, length = 15)
-    private String phone;
-
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "maid_localities", joinColumns = @JoinColumn(name = "maid_id"))
-    @Column(name = "locality", nullable = false)
-    private Set<String> localities; // Max 3 localities validated at service layer
-
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "maid_skills", joinColumns = @JoinColumn(name = "maid_id"))
-    @Enumerated(EnumType.STRING)
-    @Column(name = "skill", nullable = false)
-    private Set<SkillType> skills;
-
-    @Column(nullable = false)
-    private BigDecimal hourlyRate;
-
-    @Column(nullable = false)
-    private Double rating = 5.0;
-
-    @Convert(converter = EncryptedStringConverter.class)
-    @Column(nullable = false, length = 512)
-    private String governmentIdProof; // Encrypted at rest
-
-    @CreationTimestamp
-    private LocalDateTime createdAt;
-}
-
-public enum SkillType {
-    CLEANING, COOKING, UTENSILS, ELDERLY_CARE
-}
+```text
+Customer (1) ──< Booking (N)
+Helper   (1) ──< HelperAvailability (N)
+Booking      ──> Payment records (linked by booking ID)
+Booking / Helper workflows ──> SystemEvent audit records
 ```
 
----
+Bookings reference a customer through a required JPA `ManyToOne` relationship. The assigned helper is stored as `assignedHelperId`. Availability references a helper through `ManyToOne`. Payment and audit event associations are represented by IDs/aggregate fields rather than JPA entity relationships.
 
-### B. `MaidAvailability` Entity
-Tracks schedule availability on a per-day basis using fixed 1-hour time slots.
+## `Customer`
 
-```java
-package com.example.maidbooking.model;
+| Field | Type | Persistence / validation |
+| --- | --- | --- |
+| `id` | `Long` | Generated identity primary key. |
+| `name` | `String` | Required, non-blank. |
+| `address` | `String` | Required, non-blank; column length 1000. |
 
-import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.Setter;
+Customers are managed through `CustomerResource` (`/api/customers`). Deletion is rejected when the customer has booking history.
 
-import java.time.LocalDate;
-import java.time.LocalTime;
+## `Helper`
 
-@Entity
-@Table(name = "maid_availability", indexes = {
-    @Index(name = "idx_sched_lookup", columnList = "maidId, slotDate, startTime, status")
-})
-@Getter
-@Setter
-public class MaidAvailability {
+| Field | Type | Persistence / validation |
+| --- | --- | --- |
+| `id` | `Long` | Generated identity primary key. |
+| `name` | `String` | Required, non-blank. |
+| `phone` | `String` | Required and unique. |
+| `localities` | `Set<String>` | JPA element collection; one to three non-blank localities validated by the service. |
+| `skills` | `Set<SkillType>` | JPA element collection stored as enum strings. |
+| `hourlyRate` | `Double` | Required and positive. |
+| `rating` | `Double` | Required; new helpers default to `0.0`. |
+| `governmentIdProof` | `String` | Persisted using `EncryptedStringConverter` with AES-GCM. |
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+`SkillType` values: `CLEANING`, `COOKING`, `CHILD_CARE`, `ELDER_CARE`, `LAUNDRY`, `DISH_WASHING`, `OTHER`.
 
-    @Column(nullable = false)
-    private Long maidId;
+The encryption key is read from `HOUSEHELPER_ENCRYPTION_KEY`, with a development-only fallback in `application.yml`. The same key must be retained to decrypt existing values; production must use a securely managed key.
 
-    @Column(nullable = false)
-    private LocalDate slotDate;
+## `HelperAvailability`
 
-    @Column(nullable = false)
-    private LocalTime startTime;
+| Field | Type | Persistence / validation |
+| --- | --- | --- |
+| `id` | `Long` | Generated identity primary key. |
+| `helper` | `Helper` | Required `ManyToOne`. |
+| `slotDate` | `LocalDate` | Required. |
+| `startTime` | `LocalTime` | Required. |
+| `endTime` | `LocalTime` | Required. |
+| `status` | `AvailabilityStatus` | Required enum string: `AVAILABLE` or `BOOKED`. |
+| `version` | `Long` | JPA `@Version` optimistic locking field. |
 
-    @Column(nullable = false)
-    private LocalTime endTime;
+The combination of helper, date, and start time is unique. The service also rejects overlapping slots. Booking candidate queries require an exact date, start time, end time, locality, and skill match and sort helpers by hourly rate ascending, then rating descending.
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private AvailabilityStatus status = AvailabilityStatus.AVAILABLE;
+## `Booking`
 
-    @Version
-    private Long version; // Optimistic locking for concurrency control
-}
+| Field | Type | Persistence / validation |
+| --- | --- | --- |
+| `id` | `Long` | Generated identity primary key. |
+| `customer` | `Customer` | Required `ManyToOne`, stored as `customer_id` foreign key. |
+| `assignedHelperId` | `Long` | Required helper ID. |
+| `locality` | `String` | Required, non-blank. |
+| `skill` | `SkillType` | Required enum string. |
+| `bookingDate` | `LocalDate` | Required. |
+| `startTime`, `endTime` | `LocalTime` | Required. |
+| `totalAmount` | `Double` | Required; non-negative. |
+| `status` | `BookingStatus` | Required enum string. |
+| `version` | `Long` | JPA `@Version` optimistic locking field. |
 
-public enum AvailabilityStatus {
-    AVAILABLE, BOOKED, BLOCKED_BY_MAID
-}
-```
+`BookingStatus` values: `CONFIRMED`, `CANCELLED`, `RESCHEDULED`.
 
----
+## `Payment`
 
-### C. `Booking` Entity
-Manages customer appointments, auto-allocation states, and pricing details.
+| Field | Type | Persistence / validation |
+| --- | --- | --- |
+| `id` | `Long` | Generated identity primary key. |
+| `bookingId` | `Long` | Required booking ID. |
+| `amount` | `Double` | Required; non-negative. |
+| `paymentMethod` | `String` | Required. |
+| `paymentStatus` | `PaymentStatus` | Required enum string. |
+| `version` | `Long` | JPA `@Version` field. |
 
-```java
-package com.example.maidbooking.model;
+`PaymentStatus` values: `PENDING`, `SUCCESS`, `FAILED`, `REFUNDED`. The mock payment resource allows a pending payment to transition to `SUCCESS` or `FAILED`. Refund status is assigned by booking cancellation or rescheduling logic. These are database state transitions only; no real provider is connected.
 
-import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.Setter;
-import org.hibernate.annotations.CreationTimestamp;
+## `SystemEvent`
 
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.LocalTime;
-import java.time.LocalDateTime;
+| Field | Type | Persistence / validation |
+| --- | --- | --- |
+| `id` | `Long` | Generated identity primary key. |
+| `eventType` | `String` | Required event name. |
+| `aggregateType` | `String` | Required aggregate name. |
+| `aggregateId` | `String` | Required aggregate identifier. |
+| `payload` | `String` | Required JSON snapshot stored as a large object. |
+| `createdAt` | `Instant` | Set at persistence time and immutable. |
 
-@Entity
-@Table(name = "bookings", indexes = {
-    @Index(name = "idx_customer_bookings", columnList = "customerId"),
-    @Index(name = "idx_assigned_maid", columnList = "assignedMaidId")
-})
-@Getter
-@Setter
-public class Booking {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long bookingId;
-
-    @Column(nullable = false)
-    private String customerId;
-
-    @Column(nullable = false)
-    private Long assignedMaidId;
-
-    @Column(nullable = false)
-    private String locality;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private SkillType skill;
-
-    @Column(nullable = false)
-    private LocalDate bookingDate;
-
-    @Column(nullable = false)
-    private LocalTime startTime;
-
-    @Column(nullable = false)
-    private LocalTime endTime;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private BookingStatus status;
-
-    @Column(nullable = false)
-    private BigDecimal totalAmount;
-
-    @CreationTimestamp
-    private LocalDateTime createdAt;
-}
-
-public enum BookingStatus {
-    CONFIRMED, RESCHEDULED, CANCELLED, COMPLETED
-}
-```
-
----
-
-### D. `Payment` Entity
-Tracks transaction lifecycles, payment methods, and gateway references.
-
-```java
-package com.example.maidbooking.model;
-
-import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.Setter;
-import org.hibernate.annotations.CreationTimestamp;
-
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-
-@Entity
-@Table(name = "payments", indexes = {
-    @Index(name = "idx_booking_payment", columnList = "bookingId")
-})
-@Getter
-@Setter
-public class Payment {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long paymentId;
-
-    @Column(nullable = false)
-    private Long bookingId;
-
-    @Column(nullable = false)
-    private String customerId;
-
-    @Column(nullable = false)
-    private BigDecimal amount;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private PaymentMethod paymentMethod;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private PaymentStatus paymentStatus;
-
-    @Column(length = 100)
-    private String gatewayTransactionId;
-
-    @CreationTimestamp
-    private LocalDateTime createdAt;
-}
-
-public enum PaymentMethod {
-    UPI, CREDIT_CARD, DEBIT_CARD, NET_BANKING
-}
-
-public enum PaymentStatus {
-    PENDING, SUCCESS, FAILED, REFUNDED
-}
-```
-
----
-
-### E. `SystemEvent` Entity (Eventing & Audit Layer)
-Tracks domain milestones and serves as a local outbox log for asynchronous tracking.
-
-```java
-package com.example.maidbooking.model;
-
-import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.Setter;
-import org.hibernate.annotations.CreationTimestamp;
-
-import java.time.LocalDateTime;
-
-@Entity
-@Table(name = "system_events", indexes = {
-    @Index(name = "idx_event_type", columnList = "eventType"),
-    @Index(name = "idx_aggregate", columnList = "aggregateType, aggregateId")
-})
-@Getter
-@Setter
-public class SystemEvent {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long eventId;
-
-    @Column(nullable = false, length = 100)
-    private String eventType; // e.g., BOOKING_CREATED, BOOKING_CANCELLED
-
-    @Column(nullable = false, length = 50)
-    private String aggregateType; // e.g., BOOKING, MAID, PAYMENT
-
-    @Column(nullable = false, length = 50)
-    private String aggregateId; // e.g., "5001"
-
-    @Lob
-    @Column(nullable = false)
-    private String payload; // JSON representation of the event snapshot
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private EventStatus status = EventStatus.PENDING;
-
-    @CreationTimestamp
-    @Column(nullable = false, updatable = false)
-    private LocalDateTime createdAt;
-
-    public enum EventStatus {
-        PENDING, PUBLISHED, FAILED
-    }
-}
-```
+`EventPublisherService` writes audit snapshots in the active transaction for booking creation, rescheduling, and cancellation.
