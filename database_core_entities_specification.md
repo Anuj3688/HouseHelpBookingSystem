@@ -55,7 +55,7 @@ The encryption key is read from `HOUSEHELPER_ENCRYPTION_KEY`, with a development
 | `status` | `AvailabilityStatus` | Required enum string: `AVAILABLE` or `BOOKED`. |
 | `version` | `Long` | JPA `@Version` optimistic locking field. |
 
-The combination of helper, date, and start time is unique. The service also rejects overlapping slots. Booking candidate queries require an exact date, start time, end time, locality, and skill match and sort helpers by hourly rate ascending, then rating descending.
+The combination of helper, date, and start time is unique. Availability accepts fixed one-hour slots starting on the hour, which prevents overlap between newly submitted slots. Booking candidate queries require an exact date, start time, end time, locality, and skill match and sort helpers by hourly rate ascending, then rating descending.
 
 ## `Booking`
 
@@ -98,4 +98,4 @@ The combination of helper, date, and start time is unique. The service also reje
 | `payload` | `String` | Required JSON snapshot stored as a large object. |
 | `createdAt` | `Instant` | Set at persistence time and immutable. |
 
-`EventPublisherService` writes audit snapshots in the active transaction for booking creation, rescheduling, and cancellation.
+`EventPublisherService` writes audit snapshots in the active transaction for booking creation, rescheduling, cancellation, and helper availability updates.

@@ -5,6 +5,7 @@ import com.househelper.dto.BookingResponse;
 import com.househelper.dto.CustomerResponse;
 import com.househelper.dto.HelperSearchResponse;
 import com.househelper.dto.PaymentResponse;
+import com.househelper.model.SystemEvent;
 import com.househelper.service.HousekeepingService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -57,5 +58,11 @@ public class HousekeepingResource {
     @Operation(summary = "List all payments", description = "Returns every payment record and its current simulated payment status.")
     public List<PaymentResponse> getAllPayments() {
         return housekeepingService.getAllPayments();
+    }
+
+    @GetMapping("/events")
+    @Operation(summary = "List all system events", description = "Returns audit events in reverse chronological order.")
+    public List<SystemEvent> getAllEvents() {
+        return housekeepingService.getAllEvents();
     }
 }

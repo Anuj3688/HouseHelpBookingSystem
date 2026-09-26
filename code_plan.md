@@ -89,7 +89,7 @@ com.househelper/
 - Reschedule by reserving a new slot, releasing the old slot, updating the booking, and recording the price difference.
 - Cancel by releasing the slot, marking payments refunded, and updating the booking.
 - Simulate payment outcomes by transitioning pending payments to `SUCCESS` or `FAILED` through the payment resource.
-- Persist booking lifecycle audit events to `SystemEvent`.
+- Persist booking lifecycle and helper availability audit events to `SystemEvent`.
 
 Payment/refund behavior is database bookkeeping only; no payment gateway or external refund workflow is integrated.
 

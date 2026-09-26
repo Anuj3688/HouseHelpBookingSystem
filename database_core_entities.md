@@ -16,7 +16,7 @@ Booking lifecycle ──> SystemEvent audit snapshots
 - **HelperAvailability:** Helper, date, start/end time, status (`AVAILABLE` or `BOOKED`), and optimistic-locking version.
 - **Booking:** Required customer relationship, assigned helper ID, service locality and skill, date/time, amount, lifecycle status, and optimistic-locking version.
 - **Payment:** Booking ID, amount, payment method, and status (`SUCCESS`, `PENDING`, or `REFUNDED`). No external payment provider is connected.
-- **SystemEvent:** Event type, aggregate identity, JSON payload snapshot, and creation timestamp.
+- **SystemEvent:** Event type, aggregate identity, JSON payload snapshot, and creation timestamp. Booking lifecycle and helper availability updates are audited.
 
 ## Customer-aware booking
 

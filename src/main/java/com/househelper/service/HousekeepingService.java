@@ -5,6 +5,7 @@ import com.househelper.dto.BookingResponse;
 import com.househelper.dto.CustomerResponse;
 import com.househelper.dto.HelperSearchResponse;
 import com.househelper.dto.PaymentResponse;
+import com.househelper.model.SystemEvent;
 import com.househelper.model.AvailabilityStatus;
 import com.househelper.model.Booking;
 import com.househelper.model.Helper;
@@ -15,6 +16,7 @@ import com.househelper.repository.CustomerRepository;
 import com.househelper.repository.HelperAvailabilityRepository;
 import com.househelper.repository.HelperRepository;
 import com.househelper.repository.PaymentRepository;
+import com.househelper.repository.SystemEventRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +35,7 @@ public class HousekeepingService {
     private final HelperRepository helperRepository;
     private final BookingRepository bookingRepository;
     private final PaymentRepository paymentRepository;
+    private final SystemEventRepository systemEventRepository;
 
     @Transactional(readOnly = true)
     public List<HelperSearchResponse> getAvailableHelpers() {
@@ -79,6 +82,11 @@ public class HousekeepingService {
         return paymentRepository.findAll().stream()
                 .map(this::toPaymentResponse)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<SystemEvent> getAllEvents() {
+        return systemEventRepository.findAllByOrderByCreatedAtDesc();
     }
 
     private HelperSearchResponse toHelperResponse(Helper helper) {

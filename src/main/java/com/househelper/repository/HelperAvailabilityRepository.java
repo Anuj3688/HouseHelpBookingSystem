@@ -30,21 +30,6 @@ public interface HelperAvailabilityRepository extends JpaRepository<HelperAvaila
     List<HelperAvailability> findAllSlotsByStatusWithHelper(@Param("status") AvailabilityStatus status);
 
     @Query("""
-            select case when count(availability) > 0 then true else false end
-            from HelperAvailability availability
-            where availability.helper.id = :helperId
-              and availability.slotDate = :slotDate
-              and availability.startTime <> :sameStartTime
-              and availability.startTime < :endTime
-              and availability.endTime > :startTime
-            """)
-    boolean existsOverlappingAvailability(@Param("helperId") Long helperId,
-                                          @Param("slotDate") LocalDate slotDate,
-                                          @Param("sameStartTime") LocalTime sameStartTime,
-                                          @Param("startTime") LocalTime startTime,
-                                          @Param("endTime") LocalTime endTime);
-
-    @Query("""
             select availability
             from HelperAvailability availability
             join fetch availability.helper helper

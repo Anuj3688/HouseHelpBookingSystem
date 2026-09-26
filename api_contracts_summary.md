@@ -92,13 +92,13 @@ The body is an array of slots. Each slot includes a date, start/end times, and s
 ]
 ```
 
-End time must be later than start time. Overlapping slots for a helper are rejected. The response gives the helper ID and count of updated slots.
+Availability uses fixed one-hour slots starting on the hour (for example, `09:00`–`10:00` or `10:00`–`11:00`). Other durations and fractional-hour boundaries are rejected. The response gives the helper ID and count of updated slots.
 
 ### Search available helpers
 
 `GET /api/helpers?locality=Koramangala&skill=CLEANING&date=2026-09-30&startTime=09:00:00&endTime=10:00:00&gender=FEMALE&maxHourlyRate=400&minRating=3&page=0&size=20`
 
-Locality, skill, date, start time, and end time are required. Results include only helpers with an `AVAILABLE` slot matching the requested date and exact start/end times, locality, and skill. Optional filters are `gender` (`FEMALE`, `MALE`, or `OTHER`), `maxHourlyRate`, and `minRating` (0–5). Results are ordered by hourly rate ascending, then rating descending. Page is zero-indexed; size must be between 1 and 100. Search filters are composed as reusable criteria so more optional filters can be added without changing the endpoint shape.
+Locality, skill, date, start time, and end time are required. Results include only helpers with an `AVAILABLE` slot matching the requested date and exact start/end times, locality, and skill. Optional filters are `gender` (`FEMALE`, `MALE`, or `OTHER`), `maxHourlyRate`, and `minRating` (0–5). Results are ordered by hourly rate ascending, then rating descending. Page is zero-indexed; maximum page size is configured by `app.search.max-page-size` (default `100`). Search filters are composed as reusable criteria so more optional filters can be added without changing the endpoint shape.
 
 ## Housekeeping / test setup
 
@@ -112,6 +112,7 @@ These read-only endpoints are intended to make it easier to inspect current data
 | `GET` | `/api/housekeeping/available-slots` | All slots with status `AVAILABLE`, including helper, date, times, rate, and rating. |
 | `GET` | `/api/housekeeping/bookings` | All bookings, including customer ID, assigned helper ID, times, amount, and status. |
 | `GET` | `/api/housekeeping/payments` | All payment records and their current status. |
+| `GET` | `/api/housekeeping/events` | All system audit events, newest first. |
 
 The available-helper and available-slot endpoints do not filter by date, locality, or skill; they report every slot currently marked `AVAILABLE`.
 

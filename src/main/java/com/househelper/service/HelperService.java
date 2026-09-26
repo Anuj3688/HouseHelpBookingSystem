@@ -1,5 +1,6 @@
 package com.househelper.service;
 
+import com.househelper.config.SearchProperties;
 import com.househelper.dto.AvailabilityRequest;
 import com.househelper.dto.HelperOnboardRequest;
 import com.househelper.dto.HelperRatingRequest;
@@ -15,6 +16,7 @@ import com.househelper.model.HelperAvailability;
 import com.househelper.repository.HelperAvailabilityRepository;
 import com.househelper.repository.HelperRepository;
 import com.househelper.repository.HelperSpecifications;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -31,10 +33,10 @@ import java.util.List;
 @Slf4j
 public class HelperService {
 
-    private static final int MAX_PAGE_SIZE = 100;
-
     private final HelperRepository helperRepository;
     private final HelperAvailabilityRepository availabilityRepository;
+    private final EventPublisherService eventPublisherService;
+    private final SearchProperties searchProperties;
 
     @Transactional
     public HelperSearchResponse onboardHelper(HelperOnboardRequest request) {
@@ -63,17 +65,7 @@ public class HelperService {
 
         int updatedCount = 0;
         for (AvailabilityRequest request : requests) {
-            if (!request.getEndTime().isAfter(request.getStartTime())) {
-                throw new InvalidRequestException("Availability end time must be later than start time.");
-            }
-            if (request.getStatus() != AvailabilityStatus.AVAILABLE) {
-                throw new InvalidRequestException(
-                        "Availability updates may only set slots to AVAILABLE; booking workflows manage BOOKED status.");
-            }
-            if (availabilityRepository.existsOverlappingAvailability(helperId, request.getSlotDate(),
-                    request.getStartTime(), request.getStartTime(), request.getEndTime())) {
-                throw new ConflictException("Availability slots for a helper cannot overlap.");
-            }
+            validateAvailabilityRequest(request);
 
             HelperAvailability availability = availabilityRepository
                     .findByHelperIdAndSlotDateAndStartTime(helperId, request.getSlotDate(), request.getStartTime())
@@ -82,22 +74,45 @@ public class HelperService {
                             .slotDate(request.getSlotDate())
                             .startTime(request.getStartTime())
                             .build());
+
+            //For Booking Cancellation we have another flow.
             if (availability.getStatus() == AvailabilityStatus.BOOKED) {
+                log.error("A booked availability slot cannot be changed by helper availability updates. helperId={}, slotDate={}, startTime={}", helperId, request.getSlotDate(), request.getStartTime());
                 throw new ConflictException("A booked availability slot cannot be changed by helper availability updates.");
             }
+
             availability.setEndTime(request.getEndTime());
             availability.setStatus(AvailabilityStatus.AVAILABLE);
             availabilityRepository.save(availability);
             updatedCount++;
         }
-        log.info("Updated {} availability slots for helperId={}", updatedCount, helperId);
+        eventPublisherService.publishEvent("HELPER_AVAILABILITY_UPDATED", "Helper",
+                helperId.toString(), Map.of("helperId", helperId, "slotsUpdated", updatedCount, "slots", requests));
         return updatedCount;
+    }
+
+    private void validateAvailabilityRequest(AvailabilityRequest request) {
+        if (request.getStatus() != AvailabilityStatus.AVAILABLE) {
+            throw new InvalidRequestException(
+                    "Availability updates may only set slots to AVAILABLE; booking workflows manage BOOKED status.");
+        }
+
+        if (request.getStartTime().getMinute() != 0
+                || request.getStartTime().getSecond() != 0
+                || request.getStartTime().getNano() != 0
+                || !request.getEndTime().equals(request.getStartTime().plusHours(1))
+                || !request.getEndTime().isAfter(request.getStartTime())) {
+            throw new InvalidRequestException(
+                    "Availability must use one-hour slots starting on the hour, such as 09:00-10:00.");
+        }
     }
 
     @Transactional(readOnly = true)
     public Page<HelperSearchResponse> searchHelpers(HelperSearchCriteria criteria) {
-        if (criteria.getPage() < 0 || criteria.getSize() < 1 || criteria.getSize() > MAX_PAGE_SIZE) {
-            throw new InvalidRequestException("Page must be non-negative and size must be between 1 and 100.");
+        if (criteria.getPage() < 0 || criteria.getSize() < 1
+                || criteria.getSize() > searchProperties.getMaxPageSize()) {
+            throw new InvalidRequestException("Page must be non-negative and size must be between 1 and "
+                    + searchProperties.getMaxPageSize() + ".");
         }
         if (!criteria.getEndTime().isAfter(criteria.getStartTime())) {
             throw new InvalidRequestException("Search end time must be later than start time.");

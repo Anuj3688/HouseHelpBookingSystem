@@ -4,7 +4,6 @@ import com.househelper.model.Gender;
 import com.househelper.model.SkillType;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -49,6 +48,5 @@ public class HelperSearchCriteria {
     private int page = 0;
 
     @Min(1)
-    @Max(100)
     private int size = 20;
 }
