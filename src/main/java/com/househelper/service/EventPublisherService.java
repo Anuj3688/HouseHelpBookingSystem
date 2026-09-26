@@ -18,12 +18,18 @@ public class EventPublisherService {
     private final ObjectMapper objectMapper;
 
     @Transactional
-    public SystemEvent publishEvent(String eventType, String aggregateType, String aggregateId, Object payload) {
+    public SystemEvent publishEvent(String eventType, String aggregateType, String aggregateId,
+                                    Long helperId, Long customerId, Long paymentId, Long bookingId,
+                                    Object payload) {
         try {
             SystemEvent event = SystemEvent.builder()
                     .eventType(eventType)
                     .aggregateType(aggregateType)
                     .aggregateId(aggregateId)
+                    .helperId(helperId)
+                    .customerId(customerId)
+                    .paymentId(paymentId)
+                    .bookingId(bookingId)
                     .payload(objectMapper.writeValueAsString(payload))
                     .build();
             return systemEventRepository.save(event);

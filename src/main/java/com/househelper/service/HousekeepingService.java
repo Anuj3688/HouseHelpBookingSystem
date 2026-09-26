@@ -85,8 +85,8 @@ public class HousekeepingService {
     }
 
     @Transactional(readOnly = true)
-    public List<SystemEvent> getAllEvents() {
-        return systemEventRepository.findAllByOrderByCreatedAtDesc();
+    public List<SystemEvent> getAllEvents(Long helperId, Long customerId, Long paymentId, Long bookingId) {
+        return systemEventRepository.findAllFiltered(helperId, customerId, paymentId, bookingId);
     }
 
     private HelperSearchResponse toHelperResponse(Helper helper) {

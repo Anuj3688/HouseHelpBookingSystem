@@ -73,7 +73,7 @@ Gender must be `FEMALE`, `MALE`, or `OTHER`. Localities and skills must be non-e
 }
 ```
 
-The rating must be between 1 and 5, with up to two decimal places. Each request adds one rating. The helper stores the cumulative rating total and rating count; the average is calculated from these values and returned with the updated count.
+The rating must be a whole number from 1 to 5. Each request adds one rating. The helper stores the cumulative rating total and rating count; the average is calculated from these values and returned with the updated count.
 
 ### Set helper availability
 
@@ -112,7 +112,9 @@ These read-only endpoints are intended to make it easier to inspect current data
 | `GET` | `/api/housekeeping/available-slots` | All slots with status `AVAILABLE`, including helper, date, times, rate, and rating. |
 | `GET` | `/api/housekeeping/bookings` | All bookings, including customer ID, assigned helper ID, times, amount, and status. |
 | `GET` | `/api/housekeeping/payments` | All payment records and their current status. |
-| `GET` | `/api/housekeeping/events` | All system audit events, newest first. |
+| `GET` | `/api/housekeeping/events` | All system audit events, newest first. Optional query filters: `helperId`, `customerId`, `paymentId`, and `bookingId`; filters can be combined. Each event includes its UTC timestamp and human-readable UTC time. Booking-created and rescheduled events include their associated payment ID when a payment record is created; cancellation event payloads include the affected payment IDs. |
+
+For example, `GET /api/housekeeping/events?bookingId=12` returns events for booking 12; `GET /api/housekeeping/events?customerId=4&helperId=9` filters by both identifiers.
 
 The available-helper and available-slot endpoints do not filter by date, locality, or skill; they report every slot currently marked `AVAILABLE`.
 

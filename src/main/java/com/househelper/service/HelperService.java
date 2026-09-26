@@ -87,7 +87,8 @@ public class HelperService {
             updatedCount++;
         }
         eventPublisherService.publishEvent("HELPER_AVAILABILITY_UPDATED", "Helper",
-                helperId.toString(), Map.of("helperId", helperId, "slotsUpdated", updatedCount, "slots", requests));
+                helperId.toString(), helperId, null, null, null,
+                Map.of("helperId", helperId, "slotsUpdated", updatedCount, "slots", requests));
         return updatedCount;
     }
 
@@ -132,7 +133,7 @@ public class HelperService {
         Helper helper = helperRepository.findByIdForUpdate(helperId)
                 .orElseThrow(() -> new ResourceNotFoundException("Helper " + helperId + " was not found."));
 
-        helper.setTotalRating(helper.getTotalRating().add(request.getRating()));
+        helper.setTotalRating(helper.getTotalRating().add(BigDecimal.valueOf(request.getRating())));
         helper.setRatingCount(helper.getRatingCount() + 1);
         helperRepository.save(helper);
 

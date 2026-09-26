@@ -99,7 +99,9 @@ public class BookingService {
 
         BookingResponse response = toResponse(booking);
         eventPublisherService.publishEvent("BOOKING_CANCELLED_AFTER_PAYMENT_FAILURE", "Booking",
-                booking.getId().toString(), Map.of("booking", response, "failedPaymentId", failedPaymentId));
+                booking.getId().toString(), booking.getAssignedHelperId(), booking.getCustomer().getId(),
+                failedPaymentId, booking.getId(),
+                Map.of("booking", response, "failedPaymentId", failedPaymentId));
     }
 
     private BookingResponse createBookingAttempt(BookingRequest request) {
@@ -110,9 +112,11 @@ public class BookingService {
         Customer customer = customerRepository.findById(request.getCustomerId())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Customer " + request.getCustomerId() + " was not found."));
+
         HelperAvailability slot = findAvailableSlot(
                 request.getLocality().trim(), request.getSkill(), request.getBookingDate(),
                 request.getStartTime(), request.getEndTime(), "No helper is available for the requested slot.");
+
         slot.setStatus(AvailabilityStatus.BOOKED);
 
         Helper helper = slot.getHelper();
@@ -129,9 +133,9 @@ public class BookingService {
                 .status(BookingStatus.CONFIRMED)
                 .build();
         bookingRepository.save(booking);
-        savePayment(booking.getId(), amount, request.getPaymentMethod(), PaymentStatus.PENDING);
+        Payment payment = savePayment(booking.getId(), amount, request.getPaymentMethod(), PaymentStatus.PENDING);
 
-        return saveAndPublish(booking, "BOOKING_CREATED", response -> response);
+        return saveAndPublish(booking, "BOOKING_CREATED", payment.getId(), response -> response);
     }
 
     private BookingResponse rescheduleBookingAttempt(Long bookingId, RescheduleRequest request) {
@@ -153,9 +157,9 @@ public class BookingService {
                 request.getNewStartTime(), request.getNewEndTime());
         BigDecimal delta = newAmount.subtract(BigDecimal.valueOf(booking.getTotalAmount()));
         updateBookingForReschedule(booking, newSlot, request, newAmount);
-        saveReschedulePayment(bookingId, booking.getId(), delta);
+        Payment payment = saveReschedulePayment(bookingId, booking.getId(), delta);
 
-        return saveAndPublish(booking, "BOOKING_RESCHEDULED",
+        return saveAndPublish(booking, "BOOKING_RESCHEDULED", payment == null ? null : payment.getId(),
                 updatedResponse -> Map.of("booking", updatedResponse, "priceDelta", delta));
     }
 
@@ -212,17 +216,17 @@ public class BookingService {
         booking.setStatus(BookingStatus.RESCHEDULED);
     }
 
-    private void saveReschedulePayment(Long bookingId, Long paymentBookingId, BigDecimal delta) {
+    private Payment saveReschedulePayment(Long bookingId, Long paymentBookingId, BigDecimal delta) {
         if (delta.signum() == 0) {
-            return;
+            return null;
         }
 
         PaymentStatus status = delta.signum() > 0 ? PaymentStatus.PENDING : PaymentStatus.REFUNDED;
-        savePayment(paymentBookingId, delta.abs(), paymentMethodFor(bookingId), status);
+        return savePayment(paymentBookingId, delta.abs(), paymentMethodFor(bookingId), status);
     }
 
-    private void savePayment(Long bookingId, BigDecimal amount, String paymentMethod, PaymentStatus status) {
-        paymentRepository.save(Payment.builder()
+    private Payment savePayment(Long bookingId, BigDecimal amount, String paymentMethod, PaymentStatus status) {
+        return paymentRepository.save(Payment.builder()
                 .bookingId(bookingId)
                 .amount(amount.doubleValue())
                 .paymentMethod(paymentMethod.trim())
@@ -232,10 +236,12 @@ public class BookingService {
 
     private BookingResponse saveAndPublish(Booking booking,
                                            String eventType,
+                                           Long paymentId,
                                            Function<BookingResponse, Object> eventPayloadFactory) {
         bookingRepository.save(booking);
         BookingResponse response = toResponse(booking);
         eventPublisherService.publishEvent(eventType, "Booking", booking.getId().toString(),
+                booking.getAssignedHelperId(), booking.getCustomer().getId(), paymentId, booking.getId(),
                 eventPayloadFactory.apply(response));
         return response;
     }
@@ -253,7 +259,9 @@ public class BookingService {
         payments.forEach(payment -> payment.setPaymentStatus(PaymentStatus.REFUNDED));
         paymentRepository.saveAll(payments);
 
-        return saveAndPublish(booking, "BOOKING_CANCELLED", response -> response);
+        List<Long> paymentIds = payments.stream().map(Payment::getId).toList();
+        return saveAndPublish(booking, "BOOKING_CANCELLED", null,
+                response -> Map.of("booking", response, "paymentIds", paymentIds));
     }
 
     private <T> T withOptimisticRetries(Supplier<T> operation) {

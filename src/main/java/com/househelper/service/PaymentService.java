@@ -44,7 +44,7 @@ public class PaymentService {
             bookingService.cancelBookingAfterPaymentFailure(payment.getBookingId(), payment.getId());
         }
         eventPublisherService.publishEvent("PAYMENT_STATUS_UPDATED", "Payment",
-                payment.getId().toString(), response);
+                payment.getId().toString(), null, null, payment.getId(), payment.getBookingId(), response);
         return response;
     }
 

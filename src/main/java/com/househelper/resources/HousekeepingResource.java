@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -61,8 +62,12 @@ public class HousekeepingResource {
     }
 
     @GetMapping("/events")
-    @Operation(summary = "List all system events", description = "Returns audit events in reverse chronological order.")
-    public List<SystemEvent> getAllEvents() {
-        return housekeepingService.getAllEvents();
+    @Operation(summary = "List system events", description = "Returns audit events newest first, optionally filtered by helper, customer, payment, or booking ID.")
+    public List<SystemEvent> getAllEvents(
+            @RequestParam(required = false) Long helperId,
+            @RequestParam(required = false) Long customerId,
+            @RequestParam(required = false) Long paymentId,
+            @RequestParam(required = false) Long bookingId) {
+        return housekeepingService.getAllEvents(helperId, customerId, paymentId, bookingId);
     }
 }

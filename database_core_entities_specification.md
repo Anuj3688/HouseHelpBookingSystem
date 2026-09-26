@@ -39,7 +39,7 @@ Customers are managed through `CustomerResource` (`/api/customers`). Deletion is
 | `governmentIdProof` | `String` | Persisted using `EncryptedStringConverter` with AES-GCM. |
 
 `SkillType` values: `CLEANING`, `COOKING`, `CHILD_CARE`, `ELDER_CARE`, `LAUNDRY`, `DISH_WASHING`, `OTHER`.
-The helper's average rating is calculated from `totalRating / ratingCount` (or `0` when there are no ratings). `POST /api/helpers/{helperId}/ratings` adds a rating from 1 to 5; a pessimistic row lock prevents concurrent submissions from losing updates. Helper search requires locality, skill, and an exact available date/time slot. Gender, maximum hourly rate, and minimum rating are optional filters.
+The helper's average rating is calculated from `totalRating / ratingCount` (or `0` when there are no ratings). `POST /api/helpers/{helperId}/ratings` adds an integer rating from 1 to 5; a pessimistic row lock prevents concurrent submissions from losing updates. Helper search requires locality, skill, and an exact available date/time slot. Gender, maximum hourly rate, and minimum rating are optional filters.
 
 The encryption key is read from `HOUSEHELPER_ENCRYPTION_KEY`, with a development-only fallback in `application.yml`. The same key must be retained to decrypt existing values; production must use a securely managed key.
 
@@ -95,7 +95,8 @@ The combination of helper, date, and start time is unique. Availability accepts 
 | `eventType` | `String` | Required event name. |
 | `aggregateType` | `String` | Required aggregate name. |
 | `aggregateId` | `String` | Required aggregate identifier. |
+| `helperId`, `customerId`, `paymentId`, `bookingId` | `Long` | Nullable searchable identifiers for filtering events by related records. |
 | `payload` | `String` | Required JSON snapshot stored as a large object. |
-| `createdAt` | `Instant` | Set at persistence time and immutable. |
+| `createdAt` | `Instant` | Set at persistence time and immutable; exposed with a human-readable UTC time as well. |
 
-`EventPublisherService` writes audit snapshots in the active transaction for booking creation, rescheduling, cancellation, and helper availability updates.
+`EventPublisherService` writes audit snapshots in the active transaction for booking creation, rescheduling, cancellation, payment updates, and helper availability updates. `GET /api/housekeeping/events` can filter by any combination of the four nullable identifiers.
