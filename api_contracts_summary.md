@@ -38,6 +38,7 @@ Returns all registered customers. The housekeeping endpoint `GET /api/housekeepi
 | Method | Path | Behavior |
 | --- | --- | --- |
 | `GET` | `/api/customers/{customerId}` | Returns one customer, or `404` if not found. |
+| `GET` | `/api/customers/{customerId}/bookings` | Returns all of the customer's bookings, ordered by date and start time, including status and `seriesId` for recurring occurrences. Returns `404` if the customer does not exist. |
 | `PUT` | `/api/customers/{customerId}` | Replaces the customer's name and address. |
 | `DELETE` | `/api/customers/{customerId}` | Deletes a customer with no booking history; returns `204`. A customer with any booking history cannot be deleted and receives `409`. |
 
@@ -112,9 +113,9 @@ These read-only endpoints are intended to make it easier to inspect current data
 | `GET` | `/api/housekeeping/available-slots` | All slots with status `AVAILABLE`, including helper, date, times, rate, and rating. |
 | `GET` | `/api/housekeeping/bookings` | All bookings, including customer ID, assigned helper ID, times, amount, and status. |
 | `GET` | `/api/housekeeping/payments` | All payment records and their current status. |
-| `GET` | `/api/housekeeping/events` | All system audit events, newest first. Optional query filters: `helperId`, `customerId`, `paymentId`, and `bookingId`; filters can be combined. Each event includes its UTC timestamp and human-readable UTC time. Booking-created and rescheduled events include their associated payment ID when a payment record is created; cancellation event payloads include the affected payment IDs. |
+| `GET` | `/api/housekeeping/events` | All system audit events, newest first. Optional query filters: `helperId`, `customerId`, `paymentId`, `bookingId`, and `seriesId`; filters can be combined. Each event includes its UTC timestamp and human-readable UTC time. Booking-created and rescheduled events include their associated payment ID when a payment record is created; cancellation event payloads include the affected payment IDs. |
 
-For example, `GET /api/housekeeping/events?bookingId=12` returns events for booking 12; `GET /api/housekeeping/events?customerId=4&helperId=9` filters by both identifiers.
+For example, `GET /api/housekeeping/events?bookingId=12` returns events for booking 12; `GET /api/housekeeping/events?customerId=4&helperId=9` filters by both identifiers; `GET /api/housekeeping/events?seriesId=3` returns events for a recurring series.
 
 The available-helper and available-slot endpoints do not filter by date, locality, or skill; they report every slot currently marked `AVAILABLE`.
 
@@ -143,13 +144,34 @@ The customer ID must refer to an existing customer. The system selects an availa
 | Method | Path | Request / behavior |
 | --- | --- | --- |
 | `PUT` | `/api/bookings/{bookingId}/reschedule` | Body: `{"newBookingDate":"2026-10-01","newStartTime":"10:00:00","newEndTime":"11:00:00"}`. Finds and reserves an available helper slot, releases the old slot, updates the booking, and records any price delta. |
-| `POST` | `/api/bookings/{bookingId}/cancel` | Cancels the booking, releases its current slot, marks associated payment records refunded, and writes an audit event. |
+| `POST` | `/api/bookings/{bookingId}/cancel` | Cancels one booking, releases its current slot, creates at most one pending `CANCEL_REFUND` record for the remaining refundable balance, and writes an audit event. Original payment records are preserved. |
 
-The service records payment/refund status changes in the database; no external payment gateway is integrated.
+When rescheduling, a positive price difference creates a `RESCHEDULE_PAYMENT`; a negative difference creates a pending `RESCHEDULE_REFUND`. These records do not move money because no external payment gateway is integrated.
+
+### Create and cancel a weekly booking series
+
+`POST /api/booking-series` creates a weekly series for a required number of occurrences (1–52). Every requested date uses the same weekday and time. Available occurrences are booked independently; dates without an available helper are returned in `unavailableDates` without discarding successful bookings.
+
+```json
+{
+  "customerId": 1,
+  "locality": "Koramangala",
+  "skill": "CLEANING",
+  "startDate": "2026-09-30",
+  "startTime": "09:00:00",
+  "endTime": "10:00:00",
+  "paymentMethod": "CARD",
+  "occurrenceCount": 4
+}
+```
+
+The response contains `seriesId`, the created booking responses (each has that `seriesId`), and unavailable dates. To cancel only one occurrence, use `POST /api/bookings/{bookingId}/cancel`. To cancel the entire series, use `POST /api/booking-series/{seriesId}/cancel`; all active occurrence slots are released and one pending refund is created for the remaining successful charges across those occurrences. The initial `FullRefundCancellationPolicy` is replaceable through the `CancellationRefundPolicy` interface.
 
 ## Mock payments
 
-Payment records are created as `PENDING` when a booking is created. To simulate a payment-provider result, use:
+Payment records include a `paymentType`: `BOOKING_PAYMENT`, `RESCHEDULE_PAYMENT`, `CANCEL_REFUND`, or `RESCHEDULE_REFUND`. Refund records have their own IDs and optionally point to the original charge using `relatedPaymentId`; source payment records are not overwritten.
+
+Payment records are created as `PENDING` when a booking is created. To simulate a payment-provider result for a charge or refund request, use:
 
 `PATCH /api/payments/{paymentId}/status`
 
@@ -159,7 +181,7 @@ Payment records are created as `PENDING` when a booking is created. To simulate 
 }
 ```
 
-The accepted outcomes are `SUCCESS` and `FAILED`. Only a `PENDING` payment can be updated this way; an already completed or refunded payment returns `409 Conflict`. `GET /api/payments/{paymentId}` retrieves one payment record. A status update also writes a `PAYMENT_STATUS_UPDATED` audit event. This endpoint simulates the provider result; it does not charge or refund money.
+The accepted outcomes are `SUCCESS` and `FAILED`. Only a `PENDING` payment can be updated this way; an already completed payment returns `409 Conflict`. For refund-type records, these outcomes represent the simulated refund result. `GET /api/payments/{paymentId}` retrieves one payment record, including its type and related payment ID. A status update also writes a `PAYMENT_STATUS_UPDATED` audit event. This endpoint simulates provider results; it does not charge or refund money.
 
 ## Error responses
 

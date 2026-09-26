@@ -88,7 +88,7 @@ public class HelperService {
         }
         eventPublisherService.publishEvent("HELPER_AVAILABILITY_UPDATED", "Helper",
                 helperId.toString(), helperId, null, null, null,
-                Map.of("helperId", helperId, "slotsUpdated", updatedCount, "slots", requests));
+                null, Map.of("helperId", helperId, "slotsUpdated", updatedCount, "slots", requests));
         return updatedCount;
     }
 

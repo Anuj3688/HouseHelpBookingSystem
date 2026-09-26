@@ -20,7 +20,7 @@ public class EventPublisherService {
     @Transactional
     public SystemEvent publishEvent(String eventType, String aggregateType, String aggregateId,
                                     Long helperId, Long customerId, Long paymentId, Long bookingId,
-                                    Object payload) {
+                                    Long seriesId, Object payload) {
         try {
             SystemEvent event = SystemEvent.builder()
                     .eventType(eventType)
@@ -30,6 +30,7 @@ public class EventPublisherService {
                     .customerId(customerId)
                     .paymentId(paymentId)
                     .bookingId(bookingId)
+                    .seriesId(seriesId)
                     .payload(objectMapper.writeValueAsString(payload))
                     .build();
             return systemEventRepository.save(event);

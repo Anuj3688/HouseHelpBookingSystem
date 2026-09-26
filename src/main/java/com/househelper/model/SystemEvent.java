@@ -24,7 +24,8 @@ import java.time.format.DateTimeFormatter;
         @Index(name = "idx_event_helper_id", columnList = "helper_id"),
         @Index(name = "idx_event_customer_id", columnList = "customer_id"),
         @Index(name = "idx_event_payment_id", columnList = "payment_id"),
-        @Index(name = "idx_event_booking_id", columnList = "booking_id")
+        @Index(name = "idx_event_booking_id", columnList = "booking_id"),
+        @Index(name = "idx_event_series_id", columnList = "series_id")
 })
 @Data
 @Builder
@@ -56,6 +57,9 @@ public class SystemEvent {
 
     @Column(name = "booking_id")
     private Long bookingId;
+
+    @Column(name = "series_id")
+    private Long seriesId;
 
     @Lob
     @Column(nullable = false)

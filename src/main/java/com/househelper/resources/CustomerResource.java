@@ -2,6 +2,7 @@ package com.househelper.resources;
 
 import com.househelper.dto.CustomerRequest;
 import com.househelper.dto.CustomerResponse;
+import com.househelper.dto.BookingResponse;
 import com.househelper.service.CustomerService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -46,6 +47,13 @@ public class CustomerResource {
     @Operation(summary = "Get a customer", description = "Returns one customer by its generated ID.")
     public CustomerResponse getCustomer(@PathVariable Long customerId) {
         return customerService.getCustomer(customerId);
+    }
+
+    @GetMapping("/{customerId}/bookings")
+    @Operation(summary = "List a customer's bookings",
+            description = "Returns the customer's bookings, including cancelled bookings and recurring series IDs.")
+    public List<BookingResponse> getCustomerBookings(@PathVariable Long customerId) {
+        return customerService.getCustomerBookings(customerId);
     }
 
     @PutMapping("/{customerId}")

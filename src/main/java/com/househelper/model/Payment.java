@@ -29,9 +29,19 @@ public class Payment {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @NotNull
-    @Column(name = "booking_id", nullable = false)
+    @Column(name = "booking_id")
     private Long bookingId;
+
+    @Column(name = "booking_series_id")
+    private Long bookingSeriesId;
+
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_type", nullable = false)
+    private PaymentType paymentType;
+
+    @Column(name = "related_payment_id")
+    private Long relatedPaymentId;
 
     @NotNull
     @PositiveOrZero

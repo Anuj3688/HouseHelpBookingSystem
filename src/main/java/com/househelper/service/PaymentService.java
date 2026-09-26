@@ -7,6 +7,7 @@ import com.househelper.exception.InvalidRequestException;
 import com.househelper.exception.ResourceNotFoundException;
 import com.househelper.model.Payment;
 import com.househelper.model.PaymentStatus;
+import com.househelper.model.PaymentType;
 import com.househelper.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -40,11 +41,12 @@ public class PaymentService {
 
         payment.setPaymentStatus(requestedStatus);
         PaymentResponse response = toResponse(paymentRepository.save(payment));
-        if (requestedStatus == PaymentStatus.FAILED) {
+        if (requestedStatus == PaymentStatus.FAILED && payment.getPaymentType() == PaymentType.BOOKING_PAYMENT) {
             bookingService.cancelBookingAfterPaymentFailure(payment.getBookingId(), payment.getId());
         }
         eventPublisherService.publishEvent("PAYMENT_STATUS_UPDATED", "Payment",
-                payment.getId().toString(), null, null, payment.getId(), payment.getBookingId(), response);
+                payment.getId().toString(), null, null, payment.getId(), payment.getBookingId(),
+                payment.getBookingSeriesId(), response);
         return response;
     }
 
@@ -57,6 +59,9 @@ public class PaymentService {
         return PaymentResponse.builder()
                 .id(payment.getId())
                 .bookingId(payment.getBookingId())
+                .bookingSeriesId(payment.getBookingSeriesId())
+                .paymentType(payment.getPaymentType())
+                .relatedPaymentId(payment.getRelatedPaymentId())
                 .amount(payment.getAmount())
                 .paymentMethod(payment.getPaymentMethod())
                 .paymentStatus(payment.getPaymentStatus())

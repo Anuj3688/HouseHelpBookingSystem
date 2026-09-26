@@ -85,8 +85,9 @@ public class HousekeepingService {
     }
 
     @Transactional(readOnly = true)
-    public List<SystemEvent> getAllEvents(Long helperId, Long customerId, Long paymentId, Long bookingId) {
-        return systemEventRepository.findAllFiltered(helperId, customerId, paymentId, bookingId);
+    public List<SystemEvent> getAllEvents(Long helperId, Long customerId, Long paymentId,
+                                          Long bookingId, Long seriesId) {
+        return systemEventRepository.findAllFiltered(helperId, customerId, paymentId, bookingId, seriesId);
     }
 
     private HelperSearchResponse toHelperResponse(Helper helper) {
@@ -137,6 +138,9 @@ public class HousekeepingService {
         return PaymentResponse.builder()
                 .id(payment.getId())
                 .bookingId(payment.getBookingId())
+                .bookingSeriesId(payment.getBookingSeriesId())
+                .paymentType(payment.getPaymentType())
+                .relatedPaymentId(payment.getRelatedPaymentId())
                 .amount(payment.getAmount())
                 .paymentMethod(payment.getPaymentMethod())
                 .paymentStatus(payment.getPaymentStatus())

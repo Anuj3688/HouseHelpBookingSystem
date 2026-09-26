@@ -17,6 +17,7 @@ import java.time.LocalTime;
 public class BookingResponse {
 
     private Long id;
+    private Long seriesId;
     private Long customerId;
     private Long assignedHelperId;
     private String locality;

@@ -67,7 +67,8 @@ public class HousekeepingResource {
             @RequestParam(required = false) Long helperId,
             @RequestParam(required = false) Long customerId,
             @RequestParam(required = false) Long paymentId,
-            @RequestParam(required = false) Long bookingId) {
-        return housekeepingService.getAllEvents(helperId, customerId, paymentId, bookingId);
+            @RequestParam(required = false) Long bookingId,
+            @RequestParam(required = false) Long seriesId) {
+        return housekeepingService.getAllEvents(helperId, customerId, paymentId, bookingId, seriesId);
     }
 }

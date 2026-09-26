@@ -9,17 +9,17 @@ import com.househelper.exception.ResourceNotFoundException;
 import com.househelper.exception.SlotUnavailableException;
 import com.househelper.model.AvailabilityStatus;
 import com.househelper.model.Booking;
+import com.househelper.model.BookingSeries;
 import com.househelper.model.BookingStatus;
 import com.househelper.model.Customer;
 import com.househelper.model.Helper;
 import com.househelper.model.HelperAvailability;
 import com.househelper.model.Payment;
-import com.househelper.model.PaymentStatus;
+import com.househelper.model.PaymentType;
 import com.househelper.model.SkillType;
 import com.househelper.repository.BookingRepository;
 import com.househelper.repository.CustomerRepository;
 import com.househelper.repository.HelperAvailabilityRepository;
-import com.househelper.repository.PaymentRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
@@ -33,7 +33,9 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -46,20 +48,20 @@ public class BookingService {
     private final BookingRepository bookingRepository;
     private final CustomerRepository customerRepository;
     private final HelperAvailabilityRepository availabilityRepository;
-    private final PaymentRepository paymentRepository;
+    private final PaymentRecordService paymentRecordService;
     private final EventPublisherService eventPublisherService;
     private final TransactionTemplate transactionTemplate;
 
     public BookingService(BookingRepository bookingRepository,
                           CustomerRepository customerRepository,
                           HelperAvailabilityRepository availabilityRepository,
-                          PaymentRepository paymentRepository,
+                          PaymentRecordService paymentRecordService,
                           EventPublisherService eventPublisherService,
                           PlatformTransactionManager transactionManager) {
         this.bookingRepository = bookingRepository;
         this.customerRepository = customerRepository;
         this.availabilityRepository = availabilityRepository;
-        this.paymentRepository = paymentRepository;
+        this.paymentRecordService = paymentRecordService;
         this.eventPublisherService = eventPublisherService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
@@ -67,6 +69,12 @@ public class BookingService {
     public BookingResponse createBooking(BookingRequest request) {
         validatePeriod(request.getStartTime(), request.getEndTime());
         return withOptimisticRetries(() -> createBookingAttempt(request));
+    }
+
+    public BookingResponse createRecurringBookingOccurrence(BookingSeries series, BookingRequest request) {
+        validatePeriod(request.getStartTime(), request.getEndTime());
+        return withOptimisticRetries(() -> transactionTemplate.execute(status ->
+                createBookingInTransaction(request, series)));
     }
 
     public BookingResponse rescheduleBooking(Long bookingId, RescheduleRequest request) {
@@ -89,26 +97,25 @@ public class BookingService {
         booking.setStatus(BookingStatus.CANCELLED);
         bookingRepository.save(booking);
 
-        List<Payment> payments = paymentRepository.findByBookingId(bookingId);
-        payments.stream()
-                .filter(payment -> !payment.getId().equals(failedPaymentId))
-                .filter(payment -> payment.getPaymentStatus() == PaymentStatus.PENDING
-                        || payment.getPaymentStatus() == PaymentStatus.SUCCESS)
-                .forEach(payment -> payment.setPaymentStatus(PaymentStatus.REFUNDED));
-        paymentRepository.saveAll(payments);
+        Optional<Payment> refund = paymentRecordService.createCancellationRefund(bookingId,
+                booking.getBookingSeries() == null ? null : booking.getBookingSeries().getId(), failedPaymentId);
 
         BookingResponse response = toResponse(booking);
+        Map<String, Object> eventPayload = new LinkedHashMap<>();
+        eventPayload.put("booking", response);
+        eventPayload.put("failedPaymentId", failedPaymentId);
+        eventPayload.put("refundPaymentId", refund.map(Payment::getId).orElse(null));
         eventPublisherService.publishEvent("BOOKING_CANCELLED_AFTER_PAYMENT_FAILURE", "Booking",
                 booking.getId().toString(), booking.getAssignedHelperId(), booking.getCustomer().getId(),
-                failedPaymentId, booking.getId(),
-                Map.of("booking", response, "failedPaymentId", failedPaymentId));
+                failedPaymentId, booking.getId(), booking.getBookingSeries() == null
+                        ? null : booking.getBookingSeries().getId(), eventPayload);
     }
 
     private BookingResponse createBookingAttempt(BookingRequest request) {
-        return transactionTemplate.execute(status -> createBookingInTransaction(request));
+        return transactionTemplate.execute(status -> createBookingInTransaction(request, null));
     }
 
-    private BookingResponse createBookingInTransaction(BookingRequest request) {
+    private BookingResponse createBookingInTransaction(BookingRequest request, BookingSeries series) {
         Customer customer = customerRepository.findById(request.getCustomerId())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Customer " + request.getCustomerId() + " was not found."));
@@ -123,6 +130,7 @@ public class BookingService {
         BigDecimal amount = calculateAmount(helper.getHourlyRate(), request.getStartTime(), request.getEndTime());
         Booking booking = Booking.builder()
                 .customer(customer)
+                .bookingSeries(series)
                 .assignedHelperId(helper.getId())
                 .locality(request.getLocality().trim())
                 .skill(request.getSkill())
@@ -133,7 +141,8 @@ public class BookingService {
                 .status(BookingStatus.CONFIRMED)
                 .build();
         bookingRepository.save(booking);
-        Payment payment = savePayment(booking.getId(), amount, request.getPaymentMethod(), PaymentStatus.PENDING);
+        Payment payment = paymentRecordService.createBookingPayment(
+                booking.getId(), series == null ? null : series.getId(), amount, request.getPaymentMethod());
 
         return saveAndPublish(booking, "BOOKING_CREATED", payment.getId(), response -> response);
     }
@@ -157,7 +166,8 @@ public class BookingService {
                 request.getNewStartTime(), request.getNewEndTime());
         BigDecimal delta = newAmount.subtract(BigDecimal.valueOf(booking.getTotalAmount()));
         updateBookingForReschedule(booking, newSlot, request, newAmount);
-        Payment payment = saveReschedulePayment(bookingId, booking.getId(), delta);
+        Payment payment = paymentRecordService.createRescheduleAdjustment(bookingId,
+                booking.getBookingSeries() == null ? null : booking.getBookingSeries().getId(), delta);
 
         return saveAndPublish(booking, "BOOKING_RESCHEDULED", payment == null ? null : payment.getId(),
                 updatedResponse -> Map.of("booking", updatedResponse, "priceDelta", delta));
@@ -199,9 +209,11 @@ public class BookingService {
     }
 
     private void releaseCurrentSlot(Booking booking) {
-        availabilityRepository.findByHelperIdAndSlotDateAndStartTime(
+        HelperAvailability slot = availabilityRepository.findByHelperIdAndSlotDateAndStartTime(
                         booking.getAssignedHelperId(), booking.getBookingDate(), booking.getStartTime())
-                .ifPresent(slot -> slot.setStatus(AvailabilityStatus.AVAILABLE));
+                .orElseThrow(() -> new ConflictException(
+                        "The availability slot for booking " + booking.getId() + " was not found."));
+        slot.setStatus(AvailabilityStatus.AVAILABLE);
     }
 
     private void updateBookingForReschedule(Booking booking,
@@ -216,24 +228,6 @@ public class BookingService {
         booking.setStatus(BookingStatus.RESCHEDULED);
     }
 
-    private Payment saveReschedulePayment(Long bookingId, Long paymentBookingId, BigDecimal delta) {
-        if (delta.signum() == 0) {
-            return null;
-        }
-
-        PaymentStatus status = delta.signum() > 0 ? PaymentStatus.PENDING : PaymentStatus.REFUNDED;
-        return savePayment(paymentBookingId, delta.abs(), paymentMethodFor(bookingId), status);
-    }
-
-    private Payment savePayment(Long bookingId, BigDecimal amount, String paymentMethod, PaymentStatus status) {
-        return paymentRepository.save(Payment.builder()
-                .bookingId(bookingId)
-                .amount(amount.doubleValue())
-                .paymentMethod(paymentMethod.trim())
-                .paymentStatus(status)
-                .build());
-    }
-
     private BookingResponse saveAndPublish(Booking booking,
                                            String eventType,
                                            Long paymentId,
@@ -242,6 +236,7 @@ public class BookingService {
         BookingResponse response = toResponse(booking);
         eventPublisherService.publishEvent(eventType, "Booking", booking.getId().toString(),
                 booking.getAssignedHelperId(), booking.getCustomer().getId(), paymentId, booking.getId(),
+                booking.getBookingSeries() == null ? null : booking.getBookingSeries().getId(),
                 eventPayloadFactory.apply(response));
         return response;
     }
@@ -255,13 +250,18 @@ public class BookingService {
         releaseCurrentSlot(booking);
         booking.setStatus(BookingStatus.CANCELLED);
 
-        List<Payment> payments = paymentRepository.findByBookingId(bookingId);
-        payments.forEach(payment -> payment.setPaymentStatus(PaymentStatus.REFUNDED));
-        paymentRepository.saveAll(payments);
-
+        List<Payment> payments = paymentRecordService.findPaymentsForBooking(bookingId);
         List<Long> paymentIds = payments.stream().map(Payment::getId).toList();
+        Optional<Payment> refund = paymentRecordService.createCancellationRefund(bookingId,
+                booking.getBookingSeries() == null ? null : booking.getBookingSeries().getId(), null);
         return saveAndPublish(booking, "BOOKING_CANCELLED", null,
-                response -> Map.of("booking", response, "paymentIds", paymentIds));
+                response -> {
+                    Map<String, Object> payload = new LinkedHashMap<>();
+                    payload.put("booking", response);
+                    payload.put("paymentIds", paymentIds);
+                    payload.put("refundPaymentId", refund.map(Payment::getId).orElse(null));
+                    return payload;
+                });
     }
 
     private <T> T withOptimisticRetries(Supplier<T> operation) {
@@ -291,16 +291,10 @@ public class BookingService {
                 .divide(BigDecimal.valueOf(3600), 2, RoundingMode.HALF_UP);
     }
 
-    private String paymentMethodFor(Long bookingId) {
-        return paymentRepository.findByBookingId(bookingId).stream()
-                .findFirst()
-                .map(Payment::getPaymentMethod)
-                .orElse("UNSPECIFIED");
-    }
-
     private BookingResponse toResponse(Booking booking) {
         return BookingResponse.builder()
                 .id(booking.getId())
+                .seriesId(booking.getBookingSeries() == null ? null : booking.getBookingSeries().getId())
                 .customerId(booking.getCustomer().getId())
                 .assignedHelperId(booking.getAssignedHelperId())
                 .locality(booking.getLocality())
