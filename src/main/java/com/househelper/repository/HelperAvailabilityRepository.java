@@ -18,12 +18,14 @@ public interface HelperAvailabilityRepository extends JpaRepository<HelperAvaila
             Long helperId, LocalDate slotDate, LocalTime startTime);
 
     @Query("""
-            select distinct availability
+            select availability
             from HelperAvailability availability
             join fetch availability.helper helper
             where availability.status = :status
             order by availability.slotDate asc, availability.startTime asc,
-                     helper.hourlyRate asc, helper.rating desc
+                     helper.hourlyRate asc,
+                     case when helper.ratingCount > 0
+                          then helper.totalRating / helper.ratingCount else 0 end desc
             """)
     List<HelperAvailability> findAllSlotsByStatusWithHelper(@Param("status") AvailabilityStatus status);
 
@@ -43,7 +45,7 @@ public interface HelperAvailabilityRepository extends JpaRepository<HelperAvaila
                                           @Param("endTime") LocalTime endTime);
 
     @Query("""
-            select distinct availability
+            select availability
             from HelperAvailability availability
             join fetch availability.helper helper
             join helper.localities locality
@@ -54,7 +56,9 @@ public interface HelperAvailabilityRepository extends JpaRepository<HelperAvaila
               and availability.startTime = :startTime
               and availability.endTime = :endTime
               and availability.status = :status
-            order by helper.hourlyRate asc, helper.rating desc
+            order by helper.hourlyRate asc,
+                     case when helper.ratingCount > 0
+                          then helper.totalRating / helper.ratingCount else 0 end desc
             """)
     List<HelperAvailability> findAvailableHelpersForSlot(
             @Param("locality") String locality,

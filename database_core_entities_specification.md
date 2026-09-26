@@ -30,13 +30,16 @@ Customers are managed through `CustomerResource` (`/api/customers`). Deletion is
 | `id` | `Long` | Generated identity primary key. |
 | `name` | `String` | Required, non-blank. |
 | `phone` | `String` | Required and unique. |
+| `gender` | `Gender` | Required; persisted as an enum string (`FEMALE`, `MALE`, or `OTHER`). |
 | `localities` | `Set<String>` | JPA element collection; one to three non-blank localities validated by the service. |
 | `skills` | `Set<SkillType>` | JPA element collection stored as enum strings. |
 | `hourlyRate` | `Double` | Required and positive. |
-| `rating` | `Double` | Required; new helpers default to `0.0`. |
+| `totalRating` | `BigDecimal` | Required; cumulative submitted rating total, defaults to `0`. |
+| `ratingCount` | `Long` | Required; number of submitted ratings, defaults to `0`. |
 | `governmentIdProof` | `String` | Persisted using `EncryptedStringConverter` with AES-GCM. |
 
 `SkillType` values: `CLEANING`, `COOKING`, `CHILD_CARE`, `ELDER_CARE`, `LAUNDRY`, `DISH_WASHING`, `OTHER`.
+The helper's average rating is calculated from `totalRating / ratingCount` (or `0` when there are no ratings). `POST /api/helpers/{helperId}/ratings` adds a rating from 1 to 5; a pessimistic row lock prevents concurrent submissions from losing updates. Helper search requires locality, skill, and an exact available date/time slot. Gender, maximum hourly rate, and minimum rating are optional filters.
 
 The encryption key is read from `HOUSEHELPER_ENCRYPTION_KEY`, with a development-only fallback in `application.yml`. The same key must be retained to decrypt existing values; production must use a securely managed key.
 

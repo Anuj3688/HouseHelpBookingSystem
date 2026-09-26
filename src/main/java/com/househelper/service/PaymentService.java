@@ -18,6 +18,7 @@ public class PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final EventPublisherService eventPublisherService;
+    private final BookingService bookingService;
 
     @Transactional(readOnly = true)
     public PaymentResponse getPayment(Long paymentId) {
@@ -39,6 +40,9 @@ public class PaymentService {
 
         payment.setPaymentStatus(requestedStatus);
         PaymentResponse response = toResponse(paymentRepository.save(payment));
+        if (requestedStatus == PaymentStatus.FAILED) {
+            bookingService.cancelBookingAfterPaymentFailure(payment.getBookingId(), payment.getId());
+        }
         eventPublisherService.publishEvent("PAYMENT_STATUS_UPDATED", "Payment",
                 payment.getId().toString(), response);
         return response;

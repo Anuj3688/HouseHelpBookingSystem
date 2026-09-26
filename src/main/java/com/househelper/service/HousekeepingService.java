@@ -85,10 +85,12 @@ public class HousekeepingService {
         return HelperSearchResponse.builder()
                 .id(helper.getId())
                 .name(helper.getName())
+                .gender(helper.getGender())
                 .localities(new HashSet<>(helper.getLocalities()))
                 .skills(new HashSet<>(helper.getSkills()))
                 .hourlyRate(helper.getHourlyRate())
                 .rating(helper.getRating())
+                .ratingCount(helper.getRatingCount())
                 .build();
     }
 
@@ -104,6 +106,7 @@ public class HousekeepingService {
                 .status(slot.getStatus())
                 .hourlyRate(helper.getHourlyRate())
                 .rating(helper.getRating())
+                .ratingCount(helper.getRatingCount())
                 .build();
     }
 

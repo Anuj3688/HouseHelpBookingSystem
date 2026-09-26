@@ -77,9 +77,9 @@ com.househelper/
 
 ### Helper and availability management
 
-- Onboard helpers with a unique phone number, up to three localities, skills, hourly rate, and encrypted government ID proof.
+- Onboard helpers with a unique phone number, gender, up to three localities, skills, hourly rate, and encrypted government ID proof.
 - Add or update availability slots; invalid time ranges and overlaps are rejected.
-- Search helpers by locality and skill with pagination, ordered by lowest hourly rate and then highest rating.
+- Search available helpers by locality, skill, exact date/time slot, and optional gender, price, and rating filters; results are ordered by lowest hourly rate and then highest rating.
 
 ### Booking lifecycle
 

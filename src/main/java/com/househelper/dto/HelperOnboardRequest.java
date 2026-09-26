@@ -1,5 +1,6 @@
 package com.househelper.dto;
 
+import com.househelper.model.Gender;
 import com.househelper.model.SkillType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -24,6 +25,9 @@ public class HelperOnboardRequest {
 
     @NotBlank
     private String phone;
+
+    @NotNull
+    private Gender gender;
 
     @NotEmpty
     @Size(max = 3)

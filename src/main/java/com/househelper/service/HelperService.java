@@ -2,23 +2,27 @@ package com.househelper.service;
 
 import com.househelper.dto.AvailabilityRequest;
 import com.househelper.dto.HelperOnboardRequest;
+import com.househelper.dto.HelperRatingRequest;
+import com.househelper.dto.HelperRatingResponse;
+import com.househelper.dto.HelperSearchCriteria;
 import com.househelper.dto.HelperSearchResponse;
 import com.househelper.exception.ConflictException;
 import com.househelper.exception.InvalidRequestException;
 import com.househelper.exception.ResourceNotFoundException;
+import com.househelper.model.AvailabilityStatus;
 import com.househelper.model.Helper;
 import com.househelper.model.HelperAvailability;
-import com.househelper.model.SkillType;
 import com.househelper.repository.HelperAvailabilityRepository;
 import com.househelper.repository.HelperRepository;
+import com.househelper.repository.HelperSpecifications;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.List;
 
@@ -42,10 +46,10 @@ public class HelperService {
         Helper helper = Helper.builder()
                 .name(request.getName().trim())
                 .phone(phone)
+                .gender(request.getGender())
                 .localities(normalizeLocalities(request))
                 .skills(new HashSet<>(request.getSkills()))
                 .hourlyRate(request.getHourlyRate())
-                .rating(0.0)
                 .governmentIdProof(request.getGovernmentIdProof())
                 .build();
         Helper savedHelper = helperRepository.save(helper);
@@ -62,6 +66,10 @@ public class HelperService {
             if (!request.getEndTime().isAfter(request.getStartTime())) {
                 throw new InvalidRequestException("Availability end time must be later than start time.");
             }
+            if (request.getStatus() != AvailabilityStatus.AVAILABLE) {
+                throw new InvalidRequestException(
+                        "Availability updates may only set slots to AVAILABLE; booking workflows manage BOOKED status.");
+            }
             if (availabilityRepository.existsOverlappingAvailability(helperId, request.getSlotDate(),
                     request.getStartTime(), request.getStartTime(), request.getEndTime())) {
                 throw new ConflictException("Availability slots for a helper cannot overlap.");
@@ -74,8 +82,11 @@ public class HelperService {
                             .slotDate(request.getSlotDate())
                             .startTime(request.getStartTime())
                             .build());
+            if (availability.getStatus() == AvailabilityStatus.BOOKED) {
+                throw new ConflictException("A booked availability slot cannot be changed by helper availability updates.");
+            }
             availability.setEndTime(request.getEndTime());
-            availability.setStatus(request.getStatus());
+            availability.setStatus(AvailabilityStatus.AVAILABLE);
             availabilityRepository.save(availability);
             updatedCount++;
         }
@@ -84,26 +95,37 @@ public class HelperService {
     }
 
     @Transactional(readOnly = true)
-    public Page<HelperSearchResponse> searchHelpers(String locality, SkillType skill,
-                                                    int page, int size) {
-        if (page < 0 || size < 1 || size > MAX_PAGE_SIZE) {
+    public Page<HelperSearchResponse> searchHelpers(HelperSearchCriteria criteria) {
+        if (criteria.getPage() < 0 || criteria.getSize() < 1 || criteria.getSize() > MAX_PAGE_SIZE) {
             throw new InvalidRequestException("Page must be non-negative and size must be between 1 and 100.");
         }
-        if (locality == null || locality.isBlank()) {
-            throw new InvalidRequestException("Locality is required.");
-        }
-        if (skill == null) {
-            throw new InvalidRequestException("Skill is required.");
+        if (!criteria.getEndTime().isAfter(criteria.getStartTime())) {
+            throw new InvalidRequestException("Search end time must be later than start time.");
         }
 
-        PageRequest pageable = PageRequest.of(page, size,
-                Sort.by(Sort.Order.asc("hourlyRate"), Sort.Order.desc("rating")));
+        PageRequest pageable = PageRequest.of(criteria.getPage(), criteria.getSize());
         Page<HelperSearchResponse> results = helperRepository
-                .searchHelpers(locality.trim(), skill, pageable)
+                .findAll(HelperSpecifications.matching(criteria), pageable)
                 .map(this::toResponse);
         log.debug("Helper search completed: skill={}, page={}, size={}, results={}",
-                skill, page, size, results.getNumberOfElements());
+                criteria.getSkill(), criteria.getPage(), criteria.getSize(), results.getNumberOfElements());
         return results;
+    }
+
+    @Transactional
+    public HelperRatingResponse addRating(Long helperId, HelperRatingRequest request) {
+        Helper helper = helperRepository.findByIdForUpdate(helperId)
+                .orElseThrow(() -> new ResourceNotFoundException("Helper " + helperId + " was not found."));
+
+        helper.setTotalRating(helper.getTotalRating().add(request.getRating()));
+        helper.setRatingCount(helper.getRatingCount() + 1);
+        helperRepository.save(helper);
+
+        return HelperRatingResponse.builder()
+                .helperId(helper.getId())
+                .rating(helper.getRating())
+                .ratingCount(helper.getRatingCount())
+                .build();
     }
 
     private HashSet<String> normalizeLocalities(HelperOnboardRequest request) {
@@ -125,10 +147,12 @@ public class HelperService {
         return HelperSearchResponse.builder()
                 .id(helper.getId())
                 .name(helper.getName())
+                .gender(helper.getGender())
                 .localities(new HashSet<>(helper.getLocalities()))
                 .skills(new HashSet<>(helper.getSkills()))
                 .hourlyRate(helper.getHourlyRate())
                 .rating(helper.getRating())
+                .ratingCount(helper.getRatingCount())
                 .build();
     }
 }

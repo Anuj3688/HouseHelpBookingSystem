@@ -2,5 +2,6 @@ package com.househelper.model;
 
 public enum AvailabilityStatus {
     AVAILABLE,
-    BOOKED
+    BOOKED,
+    NOT_AVAILABLE
 }

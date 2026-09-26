@@ -24,4 +24,5 @@ public class AvailableSlotResponse {
     private AvailabilityStatus status;
     private Double hourlyRate;
     private Double rating;
+    private Long ratingCount;
 }

@@ -12,7 +12,7 @@ Booking lifecycle ──> SystemEvent audit snapshots
 ## Entities
 
 - **Customer:** Generated numeric ID, name, and address. Customers with booking history cannot be deleted.
-- **Helper:** Name, unique phone, localities (maximum three), skills, hourly rate, rating, and AES-GCM encrypted government ID proof.
+- **Helper:** Name, unique phone, gender (`FEMALE`, `MALE`, or `OTHER`), localities (maximum three), skills, hourly rate, cumulative rating total and count (average calculated on read), and AES-GCM encrypted government ID proof.
 - **HelperAvailability:** Helper, date, start/end time, status (`AVAILABLE` or `BOOKED`), and optimistic-locking version.
 - **Booking:** Required customer relationship, assigned helper ID, service locality and skill, date/time, amount, lifecycle status, and optimistic-locking version.
 - **Payment:** Booking ID, amount, payment method, and status (`SUCCESS`, `PENDING`, or `REFUNDED`). No external payment provider is connected.

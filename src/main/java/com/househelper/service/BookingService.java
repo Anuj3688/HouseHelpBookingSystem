@@ -24,6 +24,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
@@ -75,6 +76,30 @@ public class BookingService {
 
     public BookingResponse cancelBooking(Long bookingId) {
         return transactionTemplate.execute(status -> cancelBookingInTransaction(bookingId));
+    }
+
+    @Transactional
+    public void cancelBookingAfterPaymentFailure(Long bookingId, Long failedPaymentId) {
+        Booking booking = requireBooking(bookingId);
+        if (booking.getStatus() == BookingStatus.CANCELLED) {
+            return;
+        }
+
+        releaseCurrentSlot(booking);
+        booking.setStatus(BookingStatus.CANCELLED);
+        bookingRepository.save(booking);
+
+        List<Payment> payments = paymentRepository.findByBookingId(bookingId);
+        payments.stream()
+                .filter(payment -> !payment.getId().equals(failedPaymentId))
+                .filter(payment -> payment.getPaymentStatus() == PaymentStatus.PENDING
+                        || payment.getPaymentStatus() == PaymentStatus.SUCCESS)
+                .forEach(payment -> payment.setPaymentStatus(PaymentStatus.REFUNDED));
+        paymentRepository.saveAll(payments);
+
+        BookingResponse response = toResponse(booking);
+        eventPublisherService.publishEvent("BOOKING_CANCELLED_AFTER_PAYMENT_FAILURE", "Booking",
+                booking.getId().toString(), Map.of("booking", response, "failedPaymentId", failedPaymentId));
     }
 
     private BookingResponse createBookingAttempt(BookingRequest request) {

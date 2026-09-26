@@ -2,8 +2,10 @@ package com.househelper.resources;
 
 import com.househelper.dto.AvailabilityRequest;
 import com.househelper.dto.HelperOnboardRequest;
+import com.househelper.dto.HelperRatingRequest;
+import com.househelper.dto.HelperRatingResponse;
+import com.househelper.dto.HelperSearchCriteria;
 import com.househelper.dto.HelperSearchResponse;
-import com.househelper.model.SkillType;
 import com.househelper.service.HelperService;
 import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
@@ -12,10 +14,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.PutMapping;
 
@@ -49,13 +51,17 @@ public class HelperResource {
         return response;
     }
 
+    @PostMapping("/{helperId}/ratings")
+    @Operation(summary = "Rate a helper", description = "Adds one rating from 1 to 5 and returns the updated average and rating count.")
+    public HelperRatingResponse addRating(@PathVariable Long helperId,
+                                          @Valid @RequestBody HelperRatingRequest request) {
+        return helperService.addRating(helperId, request);
+    }
+
     @GetMapping
-    @Operation(summary = "Search helpers", description = "Finds helpers by locality and skill, ordered by hourly rate and rating.")
+    @Operation(summary = "Search available helpers", description = "Finds helpers available for the requested date and time, with optional gender, price, and rating filters.")
     public Page<HelperSearchResponse> searchHelpers(
-            @RequestParam String locality,
-            @RequestParam SkillType skill,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return helperService.searchHelpers(locality, skill, page, size);
+            @Valid @ModelAttribute HelperSearchCriteria criteria) {
+        return helperService.searchHelpers(criteria);
     }
 }
