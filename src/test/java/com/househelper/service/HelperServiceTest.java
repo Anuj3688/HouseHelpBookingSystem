@@ -30,8 +30,11 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -77,7 +80,8 @@ class HelperServiceTest {
         searchProperties = new SearchProperties();
         searchProperties.setMaxPageSize(100);
         helperService = new HelperService(helperRepository, availabilityRepository,
-                eventPublisherService, searchProperties);
+                eventPublisherService, searchProperties,
+                Clock.fixed(Instant.parse("2026-09-27T12:00:00Z"), ZoneOffset.UTC));
     }
 
     @Test
@@ -198,6 +202,66 @@ class HelperServiceTest {
         assertThrows(InvalidRequestException.class, () -> helperService.updateAvailability(
                 HELPER_ID, List.of(availabilityRequest(
                         SLOT_DATE, SLOT_START, SLOT_END, AvailabilityStatus.NOT_AVAILABLE))));
+
+        verify(availabilityRepository, never()).save(any(HelperAvailability.class));
+        verifyNoInteractions(eventPublisherService);
+    }
+
+    @Test
+    @DisplayName("Rejects availability dates in the past without saving a slot")
+    void updateAvailabilityPastDate() {
+        when(helperRepository.findById(HELPER_ID)).thenReturn(Optional.of(helper(HELPER_ID)));
+
+        assertThrows(InvalidRequestException.class, () -> helperService.updateAvailability(
+                HELPER_ID, List.of(availabilityRequest(
+                        LocalDate.of(2026, 9, 26), SLOT_START, SLOT_END, AvailabilityStatus.AVAILABLE))));
+
+        verify(availabilityRepository, never()).save(any(HelperAvailability.class));
+        verifyNoInteractions(eventPublisherService);
+    }
+
+    @Test
+    @DisplayName("Allows availability for the current date")
+    void updateAvailabilityCurrentDate() {
+        LocalDate currentDate = LocalDate.now(Clock.fixed(
+                Instant.parse("2026-09-27T12:00:00Z"), ZoneOffset.UTC));
+        Helper helper = helper(HELPER_ID);
+        AvailabilityRequest request = availabilityRequest(
+                currentDate, SLOT_START, SLOT_END, AvailabilityStatus.AVAILABLE);
+        when(helperRepository.findById(HELPER_ID)).thenReturn(Optional.of(helper));
+        when(availabilityRepository.findByHelperIdAndSlotDateAndStartTime(
+                HELPER_ID, currentDate, SLOT_START)).thenReturn(Optional.empty());
+
+        int updatedCount = helperService.updateAvailability(HELPER_ID, List.of(request));
+
+        assertEquals(1, updatedCount);
+        verify(availabilityRepository).save(any(HelperAvailability.class));
+    }
+
+    @Test
+    @DisplayName("Allows availability for a future date")
+    void updateAvailabilityFutureDate() {
+        LocalDate futureDate = LocalDate.of(2026, 9, 28);
+        Helper helper = helper(HELPER_ID);
+        AvailabilityRequest request = availabilityRequest(
+                futureDate, SLOT_START, SLOT_END, AvailabilityStatus.AVAILABLE);
+        when(helperRepository.findById(HELPER_ID)).thenReturn(Optional.of(helper));
+        when(availabilityRepository.findByHelperIdAndSlotDateAndStartTime(
+                HELPER_ID, futureDate, SLOT_START)).thenReturn(Optional.empty());
+
+        int updatedCount = helperService.updateAvailability(HELPER_ID, List.of(request));
+
+        assertEquals(1, updatedCount);
+        verify(availabilityRepository).save(any(HelperAvailability.class));
+    }
+
+    @Test
+    @DisplayName("Rejects an availability request with a missing date without throwing a null error")
+    void updateAvailabilityMissingDate() {
+        when(helperRepository.findById(HELPER_ID)).thenReturn(Optional.of(helper(HELPER_ID)));
+
+        assertThrows(InvalidRequestException.class, () -> helperService.updateAvailability(
+                HELPER_ID, List.of(availabilityRequest(null, SLOT_START, SLOT_END, AvailabilityStatus.AVAILABLE))));
 
         verify(availabilityRepository, never()).save(any(HelperAvailability.class));
         verifyNoInteractions(eventPublisherService);

@@ -33,6 +33,7 @@ For production, configure `HOUSEHELPER_ENCRYPTION_KEY` with a securely managed, 
 
 ## Assumptions and current behavior
 
+- Localities are free-form strings, not enums, because service areas can vary and grow without code releases. The frontend is assumed to trim, normalize, and deduplicate locality names case-insensitively before sending helper onboarding requests; the backend trims values but currently stores them in a case-sensitive set.
 - Availability is entered as fixed one-hour slots starting on the hour. Overlapping availability is not accepted.
 - Instant booking uses the server's configured local timezone and selects the earliest matching slot whose start is the current hour (when exactly on the hour) or a later hour today. If no suitable slot remains today, the request fails rather than booking a later date.
 - Scheduled and recurring bookings must start in the future according to the server's configured local timezone.

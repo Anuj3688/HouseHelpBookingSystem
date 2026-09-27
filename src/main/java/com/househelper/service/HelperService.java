@@ -25,6 +25,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
@@ -38,6 +40,7 @@ public class HelperService {
     private final HelperAvailabilityRepository availabilityRepository;
     private final EventPublisherService eventPublisherService;
     private final SearchProperties searchProperties;
+    private final Clock clock;
 
     @Transactional
     public HelperSearchResponse onboardHelper(HelperOnboardRequest request) {
@@ -94,9 +97,18 @@ public class HelperService {
     }
 
     private void validateAvailabilityRequest(AvailabilityRequest request) {
+        if (request == null || request.getSlotDate() == null || request.getStartTime() == null
+                || request.getEndTime() == null || request.getStatus() == null) {
+            throw new InvalidRequestException("Availability date, times, and status are required.");
+        }
+
         if (request.getStatus() != AvailabilityStatus.AVAILABLE) {
             throw new InvalidRequestException(
                     "Availability updates may only set slots to AVAILABLE; booking workflows manage BOOKED status.");
+        }
+
+        if (request.getSlotDate().isBefore(LocalDate.now(clock))) {
+            throw new InvalidRequestException("Availability cannot be added for a past date.");
         }
 
         if (request.getStartTime().getMinute() != 0
