@@ -18,6 +18,7 @@ import lombok.NoArgsConstructor;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.UUID;
 
 @Entity
 @Table(name = "system_events", indexes = {
@@ -34,8 +35,8 @@ import java.time.format.DateTimeFormatter;
 public class SystemEvent {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
 
     @Column(name = "event_type", nullable = false)
     private String eventType;
@@ -47,19 +48,19 @@ public class SystemEvent {
     private String aggregateId;
 
     @Column(name = "helper_id")
-    private Long helperId;
+    private UUID helperId;
 
     @Column(name = "customer_id")
-    private Long customerId;
+    private UUID customerId;
 
     @Column(name = "payment_id")
-    private Long paymentId;
+    private UUID paymentId;
 
     @Column(name = "booking_id")
-    private Long bookingId;
+    private UUID bookingId;
 
     @Column(name = "series_id")
-    private Long seriesId;
+    private UUID seriesId;
 
     @Lob
     @Column(nullable = false)

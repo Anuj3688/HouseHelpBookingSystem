@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -25,22 +26,22 @@ public class PaymentRecordService {
     private final PaymentMethodProcessorRegistry paymentMethodProcessorRegistry;
 
     @Transactional
-    public Payment createBookingPayment(Long bookingId, BigDecimal amount, PaymentMethod paymentMethod) {
+    public Payment createBookingPayment(UUID bookingId, BigDecimal amount, PaymentMethod paymentMethod) {
         return createBookingPayment(bookingId, null, amount, paymentMethod);
     }
 
     @Transactional
-    public Payment createBookingPayment(Long bookingId, Long seriesId, BigDecimal amount, PaymentMethod paymentMethod) {
+    public Payment createBookingPayment(UUID bookingId, UUID seriesId, BigDecimal amount, PaymentMethod paymentMethod) {
         return savePayment(bookingId, seriesId, amount, paymentMethod, PaymentType.BOOKING_PAYMENT, null);
     }
 
     @Transactional
-    public Payment createRescheduleAdjustment(Long bookingId, BigDecimal delta) {
+    public Payment createRescheduleAdjustment(UUID bookingId, BigDecimal delta) {
         return createRescheduleAdjustment(bookingId, null, delta);
     }
 
     @Transactional
-    public Payment createRescheduleAdjustment(Long bookingId, Long seriesId, BigDecimal delta) {
+    public Payment createRescheduleAdjustment(UUID bookingId, UUID seriesId, BigDecimal delta) {
         if (delta.signum() == 0) {
             return null;
         }
@@ -57,26 +58,26 @@ public class PaymentRecordService {
         PaymentType paymentType = delta.signum() > 0
                 ? PaymentType.RESCHEDULE_PAYMENT
                 : PaymentType.RESCHEDULE_REFUND;
-        Long relatedPaymentId = delta.signum() < 0 && sourcePayment != null
+        UUID relatedPaymentId = delta.signum() < 0 && sourcePayment != null
                 ? sourcePayment.getId()
                 : null;
         return savePayment(bookingId, seriesId, delta.abs(), paymentMethod, paymentType, relatedPaymentId);
     }
 
     @Transactional
-    public Optional<Payment> createCancellationRefund(Long bookingId, Long excludedPaymentId) {
+    public Optional<Payment> createCancellationRefund(UUID bookingId, UUID excludedPaymentId) {
         return createCancellationRefund(paymentRepository.findByBookingId(bookingId), bookingId, null,
                 excludedPaymentId);
     }
 
     @Transactional
-    public Optional<Payment> createCancellationRefund(Long bookingId, Long seriesId, Long excludedPaymentId) {
+    public Optional<Payment> createCancellationRefund(UUID bookingId, UUID seriesId, UUID excludedPaymentId) {
         return createCancellationRefund(paymentRepository.findByBookingId(bookingId), bookingId, seriesId,
                 excludedPaymentId);
     }
 
     @Transactional
-    public Optional<Payment> createSeriesCancellationRefund(Long seriesId, List<Long> bookingIds) {
+    public Optional<Payment> createSeriesCancellationRefund(UUID seriesId, List<UUID> bookingIds) {
         List<Payment> payments = paymentRepository.findByBookingSeriesId(seriesId);
         if (payments.isEmpty() && !bookingIds.isEmpty()) {
             payments = paymentRepository.findByBookingIdIn(bookingIds);
@@ -84,8 +85,8 @@ public class PaymentRecordService {
         return createCancellationRefund(payments, null, seriesId, null);
     }
 
-    private Optional<Payment> createCancellationRefund(List<Payment> payments, Long bookingId,
-                                                       Long seriesId, Long excludedPaymentId) {
+    private Optional<Payment> createCancellationRefund(List<Payment> payments, UUID bookingId,
+                                                       UUID seriesId, UUID excludedPaymentId) {
         List<Payment> successfulCharges = payments.stream()
                 .filter(payment -> excludedPaymentId == null || !payment.getId().equals(excludedPaymentId))
                 .filter(payment -> payment.getPaymentType() == PaymentType.BOOKING_PAYMENT
@@ -108,7 +109,7 @@ public class PaymentRecordService {
         }
 
         PaymentMethod paymentMethod = successfulCharges.getFirst().getPaymentMethod();
-        Long relatedPaymentId = successfulCharges.size() == 1
+        UUID relatedPaymentId = successfulCharges.size() == 1
                 ? successfulCharges.getFirst().getId()
                 : null;
         return Optional.of(savePayment(bookingId, seriesId, refundableAmount, paymentMethod,
@@ -116,12 +117,12 @@ public class PaymentRecordService {
     }
 
     @Transactional(readOnly = true)
-    public List<Payment> findPaymentsForBooking(Long bookingId) {
+    public List<Payment> findPaymentsForBooking(UUID bookingId) {
         return paymentRepository.findByBookingId(bookingId);
     }
 
-    private Payment savePayment(Long bookingId, Long seriesId, BigDecimal amount, PaymentMethod paymentMethod,
-                                PaymentType paymentType, Long relatedPaymentId) {
+    private Payment savePayment(UUID bookingId, UUID seriesId, BigDecimal amount, PaymentMethod paymentMethod,
+                                PaymentType paymentType, UUID relatedPaymentId) {
         PaymentInitiationResult initiation = paymentMethodProcessorRegistry.initiate(
                 paymentMethod, paymentType, amount);
         return paymentRepository.save(Payment.builder()

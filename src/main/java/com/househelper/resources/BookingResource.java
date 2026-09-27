@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/bookings")
@@ -31,14 +32,14 @@ public class BookingResource {
 
     @PutMapping("/{bookingId}/reschedule")
     @Operation(summary = "Reschedule a booking", description = "Moves a booking to an available slot and records any price difference.")
-    public BookingResponse rescheduleBooking(@PathVariable Long bookingId,
+    public BookingResponse rescheduleBooking(@PathVariable UUID bookingId,
                                              @Valid @RequestBody RescheduleRequest request) {
         return bookingService.rescheduleBooking(bookingId, request);
     }
 
     @PostMapping("/{bookingId}/cancel")
     @Operation(summary = "Cancel a booking", description = "Cancels a booking, releases its slot, and updates payment records.")
-    public BookingResponse cancelBooking(@PathVariable Long bookingId) {
+    public BookingResponse cancelBooking(@PathVariable UUID bookingId) {
         return bookingService.cancelBooking(bookingId);
     }
 }

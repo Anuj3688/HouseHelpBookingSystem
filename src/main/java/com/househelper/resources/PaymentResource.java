@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/payments")
@@ -24,14 +25,14 @@ public class PaymentResource {
 
     @GetMapping("/{paymentId}")
     @Operation(summary = "Get a payment", description = "Returns a payment record by its ID.")
-    public PaymentResponse getPayment(@PathVariable Long paymentId) {
+    public PaymentResponse getPayment(@PathVariable UUID paymentId) {
         return paymentService.getPayment(paymentId);
     }
 
     @PatchMapping("/{paymentId}/status")
     @Operation(summary = "Simulate a payment outcome", description = "Transitions a pending payment to SUCCESS or FAILED.")
     public PaymentResponse updatePaymentStatus(
-            @PathVariable Long paymentId,
+            @PathVariable UUID paymentId,
             @Valid @RequestBody PaymentStatusUpdateRequest request) {
         return paymentService.updatePaymentStatus(paymentId, request);
     }

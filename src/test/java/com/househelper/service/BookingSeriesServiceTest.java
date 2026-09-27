@@ -33,6 +33,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -47,8 +48,12 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class BookingSeriesServiceTest {
 
-    private static final Long SERIES_ID = 51L;
-    private static final Long CUSTOMER_ID = 11L;
+    private static UUID uuid(long value) {
+        return UUID.nameUUIDFromBytes(("test-id-" + value).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    private static final UUID SERIES_ID = uuid(51);
+    private static final UUID CUSTOMER_ID = uuid(11);
     private static final LocalDate START_DATE = LocalDate.of(2026, 10, 5);
     private static final LocalTime START_TIME = LocalTime.of(9, 0);
     private static final LocalTime END_TIME = LocalTime.of(10, 0);
@@ -85,15 +90,15 @@ class BookingSeriesServiceTest {
         when(customerRepository.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer));
         when(bookingSeriesRepository.save(any(BookingSeries.class))).thenReturn(series);
         when(bookingService.createRecurringBookingOccurrence(eq(series), any(BookingRequest.class)))
-                .thenReturn(bookingResponse(101L, SERIES_ID))
+                .thenReturn(bookingResponse(uuid(101), SERIES_ID))
                 .thenThrow(new SlotUnavailableException("No helper"))
-                .thenReturn(bookingResponse(103L, SERIES_ID));
+                .thenReturn(bookingResponse(uuid(103), SERIES_ID));
 
         BookingSeriesResponse response = bookingSeriesService.createWeeklySeries(request(3, START_TIME, END_TIME));
 
         assertEquals(SERIES_ID, response.getSeriesId());
         assertEquals(3, response.getRequestedOccurrences());
-        assertEquals(List.of(101L, 103L), response.getCreatedBookings().stream().map(BookingResponse::getId).toList());
+        assertEquals(List.of(uuid(101), uuid(103)), response.getCreatedBookings().stream().map(BookingResponse::getId).toList());
         assertEquals(List.of(START_DATE.plusWeeks(1)), response.getUnavailableDates());
         ArgumentCaptor<BookingRequest> requestCaptor = ArgumentCaptor.forClass(BookingRequest.class);
         verify(bookingService, org.mockito.Mockito.times(3))
@@ -146,20 +151,20 @@ class BookingSeriesServiceTest {
     @DisplayName("Cancels active series occurrences, releases slots, and creates one consolidated refund")
     void cancelSeries() {
         BookingSeries series = series(customer(), BookingSeriesStatus.ACTIVE);
-        Booking first = booking(101L, BookingStatus.CONFIRMED, START_DATE);
-        Booking second = booking(102L, BookingStatus.PENDING_PAYMENT, START_DATE.plusWeeks(1));
-        Booking alreadyCancelled = booking(103L, BookingStatus.CANCELLED, START_DATE.plusWeeks(2));
-        HelperAvailability firstSlot = slot(201L);
-        HelperAvailability secondSlot = slot(202L);
-        Payment refund = Payment.builder().id(301L).build();
+        Booking first = booking(uuid(101), BookingStatus.CONFIRMED, START_DATE);
+        Booking second = booking(uuid(102), BookingStatus.PENDING_PAYMENT, START_DATE.plusWeeks(1));
+        Booking alreadyCancelled = booking(uuid(103), BookingStatus.CANCELLED, START_DATE.plusWeeks(2));
+        HelperAvailability firstSlot = slot(uuid(201));
+        HelperAvailability secondSlot = slot(uuid(202));
+        Payment refund = Payment.builder().id(uuid(301)).build();
         when(bookingSeriesRepository.findByIdForUpdate(SERIES_ID)).thenReturn(Optional.of(series));
         when(bookingRepository.findByBookingSeries_IdOrderByBookingDateAsc(SERIES_ID))
                 .thenReturn(List.of(first, second, alreadyCancelled));
-        when(availabilityRepository.findByHelperIdAndSlotDateAndStartTime(21L, first.getBookingDate(), START_TIME))
+        when(availabilityRepository.findByHelperIdAndSlotDateAndStartTime(uuid(21), first.getBookingDate(), START_TIME))
                 .thenReturn(Optional.of(firstSlot));
-        when(availabilityRepository.findByHelperIdAndSlotDateAndStartTime(21L, second.getBookingDate(), START_TIME))
+        when(availabilityRepository.findByHelperIdAndSlotDateAndStartTime(uuid(21), second.getBookingDate(), START_TIME))
                 .thenReturn(Optional.of(secondSlot));
-        when(paymentRecordService.createSeriesCancellationRefund(SERIES_ID, List.of(101L, 102L)))
+        when(paymentRecordService.createSeriesCancellationRefund(SERIES_ID, List.of(uuid(101), uuid(102))))
                 .thenReturn(Optional.of(refund));
 
         BookingSeriesCancellationResponse response = bookingSeriesService.cancelSeries(SERIES_ID);
@@ -171,20 +176,20 @@ class BookingSeriesServiceTest {
         assertEquals(AvailabilityStatus.AVAILABLE, firstSlot.getStatus());
         assertEquals(AvailabilityStatus.AVAILABLE, secondSlot.getStatus());
         assertEquals(2, response.getCancelledOccurrences());
-        assertEquals(List.of(101L, 102L), response.getCancelledBookingIds());
-        assertEquals(301L, response.getRefundPaymentId());
+        assertEquals(List.of(uuid(101), uuid(102)), response.getCancelledBookingIds());
+        assertEquals(uuid(301), response.getRefundPaymentId());
         verify(bookingRepository).saveAll(List.of(first, second));
-        verify(paymentRecordService).createSeriesCancellationRefund(SERIES_ID, List.of(101L, 102L));
+        verify(paymentRecordService).createSeriesCancellationRefund(SERIES_ID, List.of(uuid(101), uuid(102)));
         verify(eventPublisherService).publishEvent(
                 eq("BOOKING_SERIES_CANCELLED"), eq("BookingSeries"), eq(SERIES_ID.toString()),
-                isNull(), eq(CUSTOMER_ID), eq(301L), isNull(), eq(SERIES_ID), any());
+                isNull(), eq(CUSTOMER_ID), eq(uuid(301)), isNull(), eq(SERIES_ID), any());
     }
 
     @Test
     @DisplayName("Cancels a series without creating a refund when there are no active occurrences")
     void cancelSeriesWithoutActiveBookings() {
         BookingSeries series = series(customer(), BookingSeriesStatus.ACTIVE);
-        Booking cancelled = booking(103L, BookingStatus.CANCELLED, START_DATE);
+        Booking cancelled = booking(uuid(103), BookingStatus.CANCELLED, START_DATE);
         when(bookingSeriesRepository.findByIdForUpdate(SERIES_ID)).thenReturn(Optional.of(series));
         when(bookingRepository.findByBookingSeries_IdOrderByBookingDateAsc(SERIES_ID))
                 .thenReturn(List.of(cancelled));
@@ -224,10 +229,10 @@ class BookingSeriesServiceTest {
     @DisplayName("Rejects series cancellation if an active booking has no corresponding availability slot")
     void cancelSeriesMissingSlot() {
         BookingSeries series = series(customer(), BookingSeriesStatus.ACTIVE);
-        Booking active = booking(101L, BookingStatus.CONFIRMED, START_DATE);
+        Booking active = booking(uuid(101), BookingStatus.CONFIRMED, START_DATE);
         when(bookingSeriesRepository.findByIdForUpdate(SERIES_ID)).thenReturn(Optional.of(series));
         when(bookingRepository.findByBookingSeries_IdOrderByBookingDateAsc(SERIES_ID)).thenReturn(List.of(active));
-        when(availabilityRepository.findByHelperIdAndSlotDateAndStartTime(21L, START_DATE, START_TIME))
+        when(availabilityRepository.findByHelperIdAndSlotDateAndStartTime(uuid(21), START_DATE, START_TIME))
                 .thenReturn(Optional.empty());
 
         assertThrows(ConflictException.class, () -> bookingSeriesService.cancelSeries(SERIES_ID));
@@ -265,16 +270,16 @@ class BookingSeriesServiceTest {
                 .build();
     }
 
-    private BookingResponse bookingResponse(Long bookingId, Long seriesId) {
+    private BookingResponse bookingResponse(UUID bookingId, UUID seriesId) {
         return BookingResponse.builder().id(bookingId).seriesId(seriesId).build();
     }
 
-    private Booking booking(Long id, BookingStatus status, LocalDate date) {
+    private Booking booking(UUID id, BookingStatus status, LocalDate date) {
         return Booking.builder()
                 .id(id)
                 .customer(customer())
                 .bookingSeries(series(customer(), BookingSeriesStatus.ACTIVE))
-                .assignedHelperId(21L)
+                .assignedHelperId(uuid(21))
                 .locality("Central")
                 .skill(com.househelper.model.SkillType.CLEANING)
                 .bookingDate(date)
@@ -285,7 +290,7 @@ class BookingSeriesServiceTest {
                 .build();
     }
 
-    private HelperAvailability slot(Long id) {
+    private HelperAvailability slot(UUID id) {
         return HelperAvailability.builder()
                 .id(id)
                 .slotDate(START_DATE)

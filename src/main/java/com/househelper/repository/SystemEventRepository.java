@@ -6,8 +6,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.UUID;
 
-public interface SystemEventRepository extends JpaRepository<SystemEvent, Long> {
+public interface SystemEventRepository extends JpaRepository<SystemEvent, UUID> {
 
     @Query("""
             select event from SystemEvent event
@@ -19,9 +20,9 @@ public interface SystemEventRepository extends JpaRepository<SystemEvent, Long> 
             order by event.createdAt desc
             """)
     List<SystemEvent> findAllFiltered(
-            @Param("helperId") Long helperId,
-            @Param("customerId") Long customerId,
-            @Param("paymentId") Long paymentId,
-            @Param("bookingId") Long bookingId,
-            @Param("seriesId") Long seriesId);
+            @Param("helperId") UUID helperId,
+            @Param("customerId") UUID customerId,
+            @Param("paymentId") UUID paymentId,
+            @Param("bookingId") UUID bookingId,
+            @Param("seriesId") UUID seriesId);
 }

@@ -27,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -59,7 +60,7 @@ public class HelperService {
     }
 
     @Transactional
-    public int updateAvailability(Long helperId, List<AvailabilityRequest> requests) {
+    public int updateAvailability(UUID helperId, List<AvailabilityRequest> requests) {
         Helper helper = helperRepository.findById(helperId)
                 .orElseThrow(() -> new ResourceNotFoundException("Helper " + helperId + " was not found."));
 
@@ -129,7 +130,7 @@ public class HelperService {
     }
 
     @Transactional
-    public HelperRatingResponse addRating(Long helperId, HelperRatingRequest request) {
+    public HelperRatingResponse addRating(UUID helperId, HelperRatingRequest request) {
         Helper helper = helperRepository.findByIdForUpdate(helperId)
                 .orElseThrow(() -> new ResourceNotFoundException("Helper " + helperId + " was not found."));
 

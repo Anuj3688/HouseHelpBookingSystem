@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.UUID;
 
 @Data
 @Builder
@@ -16,11 +17,11 @@ import java.time.LocalTime;
 @AllArgsConstructor
 public class BookingResponse {
 
-    private Long id;
-    private Long seriesId;
-    private Long paymentId;
-    private Long customerId;
-    private Long assignedHelperId;
+    private UUID id;
+    private UUID seriesId;
+    private UUID paymentId;
+    private UUID customerId;
+    private UUID assignedHelperId;
     private String locality;
     private SkillType skill;
     private LocalDate bookingDate;

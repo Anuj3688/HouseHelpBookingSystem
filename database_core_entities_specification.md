@@ -18,7 +18,7 @@ Bookings reference a customer through a required JPA `ManyToOne` relationship an
 
 | Field | Type | Persistence / validation |
 | --- | --- | --- |
-| `id` | `Long` | Generated identity primary key. |
+| `id` | `UUID` | Generated UUID primary key. |
 | `name` | `String` | Required, non-blank. |
 | `address` | `String` | Required, non-blank; column length 1000. |
 
@@ -28,7 +28,7 @@ Customers are managed through `CustomerResource` (`/api/customers`). Deletion is
 
 | Field | Type | Persistence / validation |
 | --- | --- | --- |
-| `id` | `Long` | Generated identity primary key. |
+| `id` | `UUID` | Generated UUID primary key. |
 | `name` | `String` | Required, non-blank. |
 | `phone` | `String` | Required and unique. |
 | `gender` | `Gender` | Required; persisted as an enum string (`FEMALE`, `MALE`, or `OTHER`). |
@@ -48,7 +48,7 @@ The encryption key is read from `HOUSEHELPER_ENCRYPTION_KEY`, with a development
 
 | Field | Type | Persistence / validation |
 | --- | --- | --- |
-| `id` | `Long` | Generated identity primary key. |
+| `id` | `UUID` | Generated UUID primary key. |
 | `helper` | `Helper` | Required `ManyToOne`. |
 | `slotDate` | `LocalDate` | Required. |
 | `startTime` | `LocalTime` | Required. |
@@ -62,10 +62,10 @@ The combination of helper, date, and start time is unique. Availability accepts 
 
 | Field | Type | Persistence / validation |
 | --- | --- | --- |
-| `id` | `Long` | Generated identity primary key. |
+| `id` | `UUID` | Generated UUID primary key. |
 | `customer` | `Customer` | Required `ManyToOne`, stored as `customer_id` foreign key. |
 | `bookingSeries` | `BookingSeries` | Optional `ManyToOne`, stored as `booking_series_id`; null for one-off bookings. |
-| `assignedHelperId` | `Long` | Required helper ID. |
+| `assignedHelperId` | `UUID` | Required helper ID. |
 | `locality` | `String` | Required, non-blank. |
 | `skill` | `SkillType` | Required enum string. |
 | `bookingDate` | `LocalDate` | Required. |
@@ -80,7 +80,7 @@ The combination of helper, date, and start time is unique. Availability accepts 
 
 | Field | Type | Persistence / validation |
 | --- | --- | --- |
-| `id` | `Long` | Generated identity primary key. |
+| `id` | `UUID` | Generated UUID primary key. |
 | `customer` | `Customer` | Required `ManyToOne`, stored as `customer_id`. |
 | `startDate` | `LocalDate` | Required; first occurrence date. |
 | `startTime`, `endTime` | `LocalTime` | Required; shared by all requested occurrences. |
@@ -94,14 +94,14 @@ The `POST /api/booking-series` operation independently attempts the start date a
 
 | Field | Type | Persistence / validation |
 | --- | --- | --- |
-| `id` | `Long` | Generated identity primary key. |
-| `bookingId` | `Long` | Optional booking ID; null for a series-level consolidated refund. |
-| `bookingSeriesId` | `Long` | Optional series ID for tracing payments associated with a recurring occurrence or series refund. |
+| `id` | `UUID` | Generated UUID primary key. |
+| `bookingId` | `UUID` | Optional booking ID; null for a series-level consolidated refund. |
+| `bookingSeriesId` | `UUID` | Optional series ID for tracing payments associated with a recurring occurrence or series refund. |
 | `providerReference` | `String` | Optional reference returned by the selected payment processor; current mock processors generate a unique local reference. |
 | `paymentType` | `PaymentType` | Required enum string: `BOOKING_PAYMENT`, `RESCHEDULE_PAYMENT`, `CANCEL_REFUND`, or `RESCHEDULE_REFUND`. |
-| `relatedPaymentId` | `Long` | Optional ID of the original charge for which this refund record was created. |
+| `relatedPaymentId` | `UUID` | Optional ID of the original charge for which this refund record was created. |
 | `amount` | `Double` | Required; non-negative. |
-| `paymentMethod` | `String` | Required. |
+| `paymentMethod` | `PaymentMethod` | Required enum string: `CARD`, `UPI`, or `WALLET`. |
 | `paymentStatus` | `PaymentStatus` | Required enum string. |
 | `version` | `Long` | JPA `@Version` field. |
 
@@ -111,11 +111,11 @@ The `POST /api/booking-series` operation independently attempts the start date a
 
 | Field | Type | Persistence / validation |
 | --- | --- | --- |
-| `id` | `Long` | Generated identity primary key. |
+| `id` | `UUID` | Generated UUID primary key. |
 | `eventType` | `String` | Required event name. |
 | `aggregateType` | `String` | Required aggregate name. |
 | `aggregateId` | `String` | Required aggregate identifier. |
-| `helperId`, `customerId`, `paymentId`, `bookingId`, `seriesId` | `Long` | Nullable searchable identifiers for filtering events by related records. |
+| `helperId`, `customerId`, `paymentId`, `bookingId`, `seriesId` | `UUID` | Nullable searchable identifiers for filtering events by related records. |
 | `payload` | `String` | Required JSON snapshot stored as a large object. |
 | `createdAt` | `Instant` | Set at persistence time and immutable; exposed with a human-readable UTC time as well. |
 

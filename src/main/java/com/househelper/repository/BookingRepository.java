@@ -4,16 +4,17 @@ import com.househelper.model.Booking;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.UUID;
 
-public interface BookingRepository extends JpaRepository<Booking, Long> {
+public interface BookingRepository extends JpaRepository<Booking, UUID> {
 
-    List<Booking> findByCustomer_Id(Long customerId);
+    List<Booking> findByCustomer_Id(UUID customerId);
 
-    List<Booking> findByCustomer_IdOrderByBookingDateAscStartTimeAsc(Long customerId);
+    List<Booking> findByCustomer_IdOrderByBookingDateAscStartTimeAsc(UUID customerId);
 
-    List<Booking> findByAssignedHelperId(Long assignedHelperId);
+    List<Booking> findByAssignedHelperId(UUID assignedHelperId);
 
-    List<Booking> findByBookingSeries_IdOrderByBookingDateAsc(Long seriesId);
+    List<Booking> findByBookingSeries_IdOrderByBookingDateAsc(UUID seriesId);
 
-    boolean existsByCustomer_Id(Long customerId);
+    boolean existsByCustomer_Id(UUID customerId);
 }

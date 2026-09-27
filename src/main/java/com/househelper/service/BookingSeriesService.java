@@ -31,6 +31,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -89,7 +90,7 @@ public class BookingSeriesService {
     }
 
     @Transactional
-    public BookingSeriesCancellationResponse cancelSeries(Long seriesId) {
+    public BookingSeriesCancellationResponse cancelSeries(UUID seriesId) {
         BookingSeries series = bookingSeriesRepository.findByIdForUpdate(seriesId)
                 .orElseThrow(() -> new ResourceNotFoundException("Booking series " + seriesId + " was not found."));
         if (series.getStatus() == BookingSeriesStatus.CANCELLED) {
@@ -111,7 +112,7 @@ public class BookingSeriesService {
         bookingRepository.saveAll(activeBookings);
         series.setStatus(BookingSeriesStatus.CANCELLED);
 
-        List<Long> bookingIds = activeBookings.stream().map(Booking::getId).toList();
+        List<UUID> bookingIds = activeBookings.stream().map(Booking::getId).toList();
         Optional<Payment> refund = paymentRecordService.createSeriesCancellationRefund(seriesId, bookingIds);
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("seriesId", seriesId);

@@ -11,11 +11,12 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
-public interface HelperAvailabilityRepository extends JpaRepository<HelperAvailability, Long> {
+public interface HelperAvailabilityRepository extends JpaRepository<HelperAvailability, UUID> {
 
     Optional<HelperAvailability> findByHelperIdAndSlotDateAndStartTime(
-            Long helperId, LocalDate slotDate, LocalTime startTime);
+            UUID helperId, LocalDate slotDate, LocalTime startTime);
 
     @Query("""
             select availability

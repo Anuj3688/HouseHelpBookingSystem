@@ -4,13 +4,14 @@ import lombok.Builder;
 import lombok.Value;
 
 import java.util.List;
+import java.util.UUID;
 
 @Value
 @Builder
 public class BookingSeriesCancellationResponse {
 
-    Long seriesId;
+    UUID seriesId;
     int cancelledOccurrences;
-    List<Long> cancelledBookingIds;
-    Long refundPaymentId;
+    List<UUID> cancelledBookingIds;
+    UUID refundPaymentId;
 }

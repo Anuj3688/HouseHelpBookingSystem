@@ -9,16 +9,17 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
-public interface PaymentRepository extends JpaRepository<Payment, Long> {
+public interface PaymentRepository extends JpaRepository<Payment, UUID> {
 
-    List<Payment> findByBookingId(Long bookingId);
+    List<Payment> findByBookingId(UUID bookingId);
 
-    List<Payment> findByBookingIdIn(List<Long> bookingIds);
+    List<Payment> findByBookingIdIn(List<UUID> bookingIds);
 
-    List<Payment> findByBookingSeriesId(Long bookingSeriesId);
+    List<Payment> findByBookingSeriesId(UUID bookingSeriesId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select payment from Payment payment where payment.id = :paymentId")
-    Optional<Payment> findByIdForUpdate(@Param("paymentId") Long paymentId);
+    Optional<Payment> findByIdForUpdate(@Param("paymentId") UUID paymentId);
 }

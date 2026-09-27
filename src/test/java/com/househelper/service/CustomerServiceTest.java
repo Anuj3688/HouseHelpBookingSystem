@@ -27,6 +27,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -40,7 +41,11 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class CustomerServiceTest {
 
-    private static final Long CUSTOMER_ID = 12L;
+    private static UUID uuid(long value) {
+        return UUID.nameUUIDFromBytes(("test-id-" + value).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    private static final UUID CUSTOMER_ID = uuid(12);
 
     @Mock
     private CustomerRepository customerRepository;
@@ -75,14 +80,14 @@ class CustomerServiceTest {
     @DisplayName("Returns all registered customers as response DTOs")
     void getAllCustomers() {
         when(customerRepository.findAll()).thenReturn(List.of(
-                customer(12L, "Asha", "Address 1"),
-                customer(13L, "Mira", "Address 2")));
+                customer(uuid(12), "Asha", "Address 1"),
+                customer(uuid(13), "Mira", "Address 2")));
 
         List<CustomerResponse> responses = customerService.getAllCustomers();
 
         assertEquals(2, responses.size());
         assertEquals("Asha", responses.get(0).getName());
-        assertEquals(13L, responses.get(1).getId());
+        assertEquals(uuid(13), responses.get(1).getId());
     }
 
     @Test
@@ -112,25 +117,25 @@ class CustomerServiceTest {
     @DisplayName("Returns a customer's bookings with series IDs and initial booking payment IDs")
     void getCustomerBookings() {
         Customer customer = customer(CUSTOMER_ID, "Asha", "Address");
-        Booking oneOff = booking(31L, customer, null);
-        Booking recurring = booking(32L, customer, BookingSeries.builder().id(77L).build());
+        Booking oneOff = booking(uuid(31), customer, null);
+        Booking recurring = booking(uuid(32), customer, BookingSeries.builder().id(uuid(77)).build());
         when(customerRepository.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer));
         when(bookingRepository.findByCustomer_IdOrderByBookingDateAscStartTimeAsc(CUSTOMER_ID))
                 .thenReturn(List.of(oneOff, recurring));
-        when(paymentRepository.findByBookingIdIn(List.of(31L, 32L))).thenReturn(List.of(
-                payment(101L, 31L, PaymentType.BOOKING_PAYMENT),
-                payment(102L, 31L, PaymentType.RESCHEDULE_PAYMENT),
-                payment(103L, 32L, PaymentType.BOOKING_PAYMENT)));
+        when(paymentRepository.findByBookingIdIn(List.of(uuid(31), uuid(32)))).thenReturn(List.of(
+                payment(uuid(101), uuid(31), PaymentType.BOOKING_PAYMENT),
+                payment(uuid(102), uuid(31), PaymentType.RESCHEDULE_PAYMENT),
+                payment(uuid(103), uuid(32), PaymentType.BOOKING_PAYMENT)));
 
         List<BookingResponse> responses = customerService.getCustomerBookings(CUSTOMER_ID);
 
         assertEquals(2, responses.size());
-        assertEquals(31L, responses.get(0).getId());
+        assertEquals(uuid(31), responses.get(0).getId());
         assertNull(responses.get(0).getSeriesId());
-        assertEquals(101L, responses.get(0).getPaymentId());
-        assertEquals(32L, responses.get(1).getId());
-        assertEquals(77L, responses.get(1).getSeriesId());
-        assertEquals(103L, responses.get(1).getPaymentId());
+        assertEquals(uuid(101), responses.get(0).getPaymentId());
+        assertEquals(uuid(32), responses.get(1).getId());
+        assertEquals(uuid(77), responses.get(1).getSeriesId());
+        assertEquals(uuid(103), responses.get(1).getPaymentId());
     }
 
     @Test
@@ -207,16 +212,16 @@ class CustomerServiceTest {
         verifyNoInteractions(bookingRepository, paymentRepository);
     }
 
-    private Customer customer(Long id, String name, String address) {
+    private Customer customer(UUID id, String name, String address) {
         return Customer.builder().id(id).name(name).address(address).build();
     }
 
-    private Booking booking(Long id, Customer customer, BookingSeries series) {
+    private Booking booking(UUID id, Customer customer, BookingSeries series) {
         return Booking.builder()
                 .id(id)
                 .customer(customer)
                 .bookingSeries(series)
-                .assignedHelperId(5L)
+                .assignedHelperId(uuid(5))
                 .locality("Central")
                 .skill(SkillType.CLEANING)
                 .bookingDate(LocalDate.of(2026, 10, 5))
@@ -227,7 +232,7 @@ class CustomerServiceTest {
                 .build();
     }
 
-    private Payment payment(Long id, Long bookingId, PaymentType paymentType) {
+    private Payment payment(UUID id, UUID bookingId, PaymentType paymentType) {
         return Payment.builder()
                 .id(id)
                 .bookingId(bookingId)

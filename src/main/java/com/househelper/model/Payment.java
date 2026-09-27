@@ -15,6 +15,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import java.util.UUID;
 
 @Entity
 @Table(name = "payments")
@@ -25,14 +26,14 @@ import lombok.NoArgsConstructor;
 public class Payment {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
 
     @Column(name = "booking_id")
-    private Long bookingId;
+    private UUID bookingId;
 
     @Column(name = "booking_series_id")
-    private Long bookingSeriesId;
+    private UUID bookingSeriesId;
 
     @Column(name = "provider_reference")
     private String providerReference;
@@ -43,7 +44,7 @@ public class Payment {
     private PaymentType paymentType;
 
     @Column(name = "related_payment_id")
-    private Long relatedPaymentId;
+    private UUID relatedPaymentId;
 
     @NotNull
     @PositiveOrZero

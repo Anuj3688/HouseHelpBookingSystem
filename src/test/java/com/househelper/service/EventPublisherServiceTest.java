@@ -12,6 +12,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Map;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -22,6 +23,10 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class EventPublisherServiceTest {
+
+    private static UUID uuid(long value) {
+        return UUID.nameUUIDFromBytes(("test-id-" + value).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
 
     @Mock
     private SystemEventRepository systemEventRepository;
@@ -40,16 +45,16 @@ class EventPublisherServiceTest {
         when(systemEventRepository.save(any(SystemEvent.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         SystemEvent event = eventPublisherService.publishEvent(
-                "BOOKING_CONFIRMED", "Booking", "41", 7L, 8L, 9L, 41L, 10L, payload);
+                "BOOKING_CONFIRMED", "Booking", "41", uuid(7), uuid(8), uuid(9), uuid(41), uuid(10), payload);
 
         assertEquals("BOOKING_CONFIRMED", event.getEventType());
         assertEquals("Booking", event.getAggregateType());
         assertEquals("41", event.getAggregateId());
-        assertEquals(7L, event.getHelperId());
-        assertEquals(8L, event.getCustomerId());
-        assertEquals(9L, event.getPaymentId());
-        assertEquals(41L, event.getBookingId());
-        assertEquals(10L, event.getSeriesId());
+        assertEquals(uuid(7), event.getHelperId());
+        assertEquals(uuid(8), event.getCustomerId());
+        assertEquals(uuid(9), event.getPaymentId());
+        assertEquals(uuid(41), event.getBookingId());
+        assertEquals(uuid(10), event.getSeriesId());
         assertEquals("{\"status\":\"CONFIRMED\"}", event.getPayload());
         verify(systemEventRepository).save(event);
     }
@@ -61,9 +66,9 @@ class EventPublisherServiceTest {
         when(systemEventRepository.save(any(SystemEvent.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         SystemEvent event = eventPublisherService.publishEvent(
-                "HELPER_UPDATED", "Helper", "7", 7L, null, null, null, null, Map.of());
+                "HELPER_UPDATED", "Helper", "7", uuid(7), null, null, null, null, Map.of());
 
-        assertEquals(7L, event.getHelperId());
+        assertEquals(uuid(7), event.getHelperId());
         assertEquals(null, event.getCustomerId());
         assertEquals(null, event.getPaymentId());
         assertEquals(null, event.getBookingId());
@@ -76,7 +81,7 @@ class EventPublisherServiceTest {
         when(objectMapper.writeValueAsString(any())).thenThrow(new JsonProcessingException("serialization failed") { });
 
         assertThrows(IllegalStateException.class, () -> eventPublisherService.publishEvent(
-                "BOOKING_CREATED", "Booking", "41", null, null, null, 41L, null, new Object()));
+                "BOOKING_CREATED", "Booking", "41", null, null, null, uuid(41), null, new Object()));
 
         verifyNoInteractions(systemEventRepository);
     }

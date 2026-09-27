@@ -12,6 +12,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.UUID;
 
 @Data
 @Builder
@@ -21,7 +22,7 @@ public class BookingRequest {
 
     @NotNull
     @Positive
-    private Long customerId;
+    private UUID customerId;
 
     @NotBlank
     private String locality;

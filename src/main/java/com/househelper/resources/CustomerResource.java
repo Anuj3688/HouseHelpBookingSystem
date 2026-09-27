@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/customers")
@@ -45,27 +46,27 @@ public class CustomerResource {
 
     @GetMapping("/{customerId}")
     @Operation(summary = "Get a customer", description = "Returns one customer by its generated ID.")
-    public CustomerResponse getCustomer(@PathVariable Long customerId) {
+    public CustomerResponse getCustomer(@PathVariable UUID customerId) {
         return customerService.getCustomer(customerId);
     }
 
     @GetMapping("/{customerId}/bookings")
     @Operation(summary = "List a customer's bookings",
             description = "Returns the customer's bookings, including cancelled bookings and recurring series IDs.")
-    public List<BookingResponse> getCustomerBookings(@PathVariable Long customerId) {
+    public List<BookingResponse> getCustomerBookings(@PathVariable UUID customerId) {
         return customerService.getCustomerBookings(customerId);
     }
 
     @PutMapping("/{customerId}")
     @Operation(summary = "Replace customer details", description = "Updates the customer's name and service address.")
-    public CustomerResponse updateCustomer(@PathVariable Long customerId,
+    public CustomerResponse updateCustomer(@PathVariable UUID customerId,
                                            @Valid @RequestBody CustomerRequest request) {
         return customerService.updateCustomer(customerId, request);
     }
 
     @DeleteMapping("/{customerId}")
     @Operation(summary = "Delete a customer", description = "Deletes a customer only when it has no booking history.")
-    public ResponseEntity<Void> deleteCustomer(@PathVariable Long customerId) {
+    public ResponseEntity<Void> deleteCustomer(@PathVariable UUID customerId) {
         customerService.deleteCustomer(customerId);
         return ResponseEntity.noContent().build();
     }

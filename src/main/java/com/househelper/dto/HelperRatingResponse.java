@@ -1,5 +1,7 @@
 package com.househelper.dto;
 
+import java.util.UUID;
+
 import lombok.Builder;
 import lombok.Value;
 
@@ -7,7 +9,7 @@ import lombok.Value;
 @Builder
 public class HelperRatingResponse {
 
-    Long helperId;
+    UUID helperId;
     Double rating;
     Long ratingCount;
 }

@@ -24,6 +24,7 @@ import lombok.ToString;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.UUID;
 
 @Entity
 @Table(name = "bookings")
@@ -34,8 +35,8 @@ import java.time.LocalTime;
 public class Booking {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
 
     @NotNull
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -52,7 +53,7 @@ public class Booking {
 
     @NotNull
     @Column(name = "assigned_helper_id", nullable = false)
-    private Long assignedHelperId;
+    private UUID assignedHelperId;
 
     @NotBlank
     @Column(nullable = false)

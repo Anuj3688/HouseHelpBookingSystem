@@ -9,12 +9,13 @@ import org.springframework.data.repository.query.Param;
 import jakarta.persistence.LockModeType;
 
 import java.util.Optional;
+import java.util.UUID;
 
-public interface HelperRepository extends JpaRepository<Helper, Long>, JpaSpecificationExecutor<Helper> {
+public interface HelperRepository extends JpaRepository<Helper, UUID>, JpaSpecificationExecutor<Helper> {
 
     Optional<Helper> findByPhone(String phone);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select helper from Helper helper where helper.id = :helperId")
-    Optional<Helper> findByIdForUpdate(@Param("helperId") Long helperId);
+    Optional<Helper> findByIdForUpdate(@Param("helperId") UUID helperId);
 }

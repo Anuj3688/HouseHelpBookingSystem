@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/helpers")
@@ -42,7 +43,7 @@ public class HelperResource {
     @PutMapping("/{helperId}/availability")
     @Operation(summary = "Set helper availability", description = "Creates or updates the helper's date and time slots.")
     public Map<String, Object> updateAvailability(
-            @PathVariable Long helperId,
+            @PathVariable UUID helperId,
             @Valid @RequestBody List<@Valid AvailabilityRequest> requests) {
         int savedSlots = helperService.updateAvailability(helperId, requests);
         Map<String, Object> response = new LinkedHashMap<>();
@@ -53,7 +54,7 @@ public class HelperResource {
 
     @PostMapping("/{helperId}/ratings")
     @Operation(summary = "Rate a helper", description = "Adds one rating from 1 to 5 and returns the updated average and rating count.")
-    public HelperRatingResponse addRating(@PathVariable Long helperId,
+    public HelperRatingResponse addRating(@PathVariable UUID helperId,
                                           @Valid @RequestBody HelperRatingRequest request) {
         return helperService.addRating(helperId, request);
     }

@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/housekeeping")
@@ -64,11 +65,11 @@ public class HousekeepingResource {
     @GetMapping("/events")
     @Operation(summary = "List system events", description = "Returns audit events newest first, optionally filtered by helper, customer, payment, or booking ID.")
     public List<SystemEvent> getAllEvents(
-            @RequestParam(required = false) Long helperId,
-            @RequestParam(required = false) Long customerId,
-            @RequestParam(required = false) Long paymentId,
-            @RequestParam(required = false) Long bookingId,
-            @RequestParam(required = false) Long seriesId) {
+            @RequestParam(required = false) UUID helperId,
+            @RequestParam(required = false) UUID customerId,
+            @RequestParam(required = false) UUID paymentId,
+            @RequestParam(required = false) UUID bookingId,
+            @RequestParam(required = false) UUID seriesId) {
         return housekeepingService.getAllEvents(helperId, customerId, paymentId, bookingId, seriesId);
     }
 }

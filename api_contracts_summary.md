@@ -12,7 +12,7 @@ Swagger UI is available at `/swagger-ui/index.html`; the root path `/` redirects
 
 ## Customers
 
-Customers have a generated numeric ID, name, and service address. A booking must reference an existing customer ID.
+Customer IDs and all other entity identifiers are generated UUIDs, represented as UUID strings in JSON and URL path/query parameters. A booking must reference an existing customer UUID.
 
 ### Create a customer
 
@@ -115,7 +115,7 @@ These read-only endpoints are intended to make it easier to inspect current data
 | `GET` | `/api/housekeeping/payments` | All payment records and their current status. |
 | `GET` | `/api/housekeeping/events` | All system audit events, newest first. Optional query filters: `helperId`, `customerId`, `paymentId`, `bookingId`, and `seriesId`; filters can be combined. Each event includes its UTC timestamp and human-readable UTC time. Booking-created and rescheduled events include their associated payment ID when a payment record is created; cancellation event payloads include the affected payment IDs. |
 
-For example, `GET /api/housekeeping/events?bookingId=12` returns events for booking 12; `GET /api/housekeeping/events?customerId=4&helperId=9` filters by both identifiers; `GET /api/housekeeping/events?seriesId=3` returns events for a recurring series.
+For example, `GET /api/housekeeping/events?bookingId=550e8400-e29b-41d4-a716-446655440003` filters by booking UUID; `GET /api/housekeeping/events?customerId=550e8400-e29b-41d4-a716-446655440001&helperId=550e8400-e29b-41d4-a716-446655440002` filters by both identifiers; `GET /api/housekeeping/events?seriesId=550e8400-e29b-41d4-a716-446655440004` filters by series UUID.
 
 The available-helper and available-slot endpoints do not filter by date, locality, or skill; they report every slot currently marked `AVAILABLE`.
 
@@ -127,7 +127,7 @@ The available-helper and available-slot endpoints do not filter by date, localit
 
 ```json
 {
-  "customerId": 1,
+  "customerId": "550e8400-e29b-41d4-a716-446655440001",
   "locality": "Koramangala",
   "skill": "CLEANING",
   "bookingDate": "2026-09-30",
@@ -154,7 +154,7 @@ When rescheduling, a positive price difference creates a `RESCHEDULE_PAYMENT`; a
 
 ```json
 {
-  "customerId": 1,
+  "customerId": "550e8400-e29b-41d4-a716-446655440001",
   "locality": "Koramangala",
   "skill": "CLEANING",
   "startDate": "2026-09-30",

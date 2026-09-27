@@ -27,6 +27,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -41,7 +42,7 @@ public class HousekeepingService {
 
     @Transactional(readOnly = true)
     public List<HelperSearchResponse> getAvailableHelpers() {
-        Map<Long, HelperSearchResponse> helpersById = new LinkedHashMap<>();
+        Map<UUID, HelperSearchResponse> helpersById = new LinkedHashMap<>();
         availabilityRepository.findAllSlotsByStatusWithHelper(AvailabilityStatus.AVAILABLE).forEach(slot -> {
             Helper helper = slot.getHelper();
             helpersById.putIfAbsent(helper.getId(), toHelperResponse(helper));
@@ -75,11 +76,12 @@ public class HousekeepingService {
     @Transactional(readOnly = true)
     public List<BookingResponse> getAllBookings() {
         List<Booking> bookings = bookingRepository.findAll();
-        Map<Long, Long> initialPaymentIds = bookings.isEmpty()
+        Map<UUID, UUID> initialPaymentIds = bookings.isEmpty()
                 ? Map.of()
                 : paymentRepository.findByBookingIdIn(bookings.stream().map(Booking::getId).toList()).stream()
                         .filter(payment -> payment.getPaymentType() == PaymentType.BOOKING_PAYMENT)
-                        .collect(Collectors.toMap(Payment::getBookingId, Payment::getId, Long::min));
+                        .collect(Collectors.toMap(Payment::getBookingId, Payment::getId, (left, right) ->
+                                left.compareTo(right) <= 0 ? left : right));
         return bookings.stream()
                 .map(booking -> toBookingResponse(booking, initialPaymentIds.get(booking.getId())))
                 .toList();
@@ -93,8 +95,8 @@ public class HousekeepingService {
     }
 
     @Transactional(readOnly = true)
-    public List<SystemEvent> getAllEvents(Long helperId, Long customerId, Long paymentId,
-                                          Long bookingId, Long seriesId) {
+    public List<SystemEvent> getAllEvents(UUID helperId, UUID customerId, UUID paymentId,
+                                          UUID bookingId, UUID seriesId) {
         return systemEventRepository.findAllFiltered(helperId, customerId, paymentId, bookingId, seriesId);
     }
 
@@ -127,7 +129,7 @@ public class HousekeepingService {
                 .build();
     }
 
-    private BookingResponse toBookingResponse(Booking booking, Long paymentId) {
+    private BookingResponse toBookingResponse(Booking booking, UUID paymentId) {
         return BookingResponse.builder()
                 .id(booking.getId())
                 .seriesId(booking.getBookingSeries() == null ? null : booking.getBookingSeries().getId())

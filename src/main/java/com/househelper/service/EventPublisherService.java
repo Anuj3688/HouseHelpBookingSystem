@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -19,8 +20,8 @@ public class EventPublisherService {
 
     @Transactional
     public SystemEvent publishEvent(String eventType, String aggregateType, String aggregateId,
-                                    Long helperId, Long customerId, Long paymentId, Long bookingId,
-                                    Long seriesId, Object payload) {
+                                    UUID helperId, UUID customerId, UUID paymentId, UUID bookingId,
+                                    UUID seriesId, Object payload) {
         try {
             SystemEvent event = SystemEvent.builder()
                     .eventType(eventType)

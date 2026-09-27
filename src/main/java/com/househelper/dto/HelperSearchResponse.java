@@ -8,6 +8,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.Set;
+import java.util.UUID;
 
 @Data
 @Builder
@@ -15,7 +16,7 @@ import java.util.Set;
 @AllArgsConstructor
 public class HelperSearchResponse {
 
-    private Long id;
+    private UUID id;
     private String name;
     private Gender gender;
     private Set<String> localities;

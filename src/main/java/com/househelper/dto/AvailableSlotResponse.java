@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.UUID;
 
 @Data
 @Builder
@@ -15,8 +16,8 @@ import java.time.LocalTime;
 @AllArgsConstructor
 public class AvailableSlotResponse {
 
-    private Long id;
-    private Long helperId;
+    private UUID id;
+    private UUID helperId;
     private String helperName;
     private LocalDate slotDate;
     private LocalTime startTime;

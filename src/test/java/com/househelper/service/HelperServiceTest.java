@@ -35,6 +35,7 @@ import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -49,7 +50,11 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class HelperServiceTest {
 
-    private static final Long HELPER_ID = 25L;
+    private static UUID uuid(long value) {
+        return UUID.nameUUIDFromBytes(("test-id-" + value).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    private static final UUID HELPER_ID = uuid(25);
     private static final LocalDate SLOT_DATE = LocalDate.of(2026, 10, 5);
     private static final LocalTime SLOT_START = LocalTime.of(9, 0);
     private static final LocalTime SLOT_END = LocalTime.of(10, 0);
@@ -321,7 +326,7 @@ class HelperServiceTest {
         return request;
     }
 
-    private Helper helper(Long id) {
+    private Helper helper(UUID id) {
         return Helper.builder()
                 .id(id)
                 .name("Helper Name")

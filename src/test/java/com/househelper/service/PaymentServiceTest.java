@@ -20,6 +20,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -32,6 +33,10 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class PaymentServiceTest {
+
+    private static UUID uuid(long value) {
+        return UUID.nameUUIDFromBytes(("test-id-" + value).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
 
     @Mock
     private PaymentRepository paymentRepository;
@@ -49,30 +54,30 @@ class PaymentServiceTest {
     @DisplayName("Returns a payment with booking, series, processor, and status details")
     void getPayment() {
         Payment payment = payment();
-        when(paymentRepository.findById(41L)).thenReturn(Optional.of(payment));
+        when(paymentRepository.findById(uuid(41))).thenReturn(Optional.of(payment));
 
-        PaymentResponse response = paymentService.getPayment(41L);
+        PaymentResponse response = paymentService.getPayment(uuid(41));
 
-        assertEquals(41L, response.getId());
-        assertEquals(17L, response.getBookingId());
-        assertEquals(8L, response.getBookingSeriesId());
+        assertEquals(uuid(41), response.getId());
+        assertEquals(uuid(17), response.getBookingId());
+        assertEquals(uuid(8), response.getBookingSeriesId());
         assertEquals("MOCK-CARD-REF-41", response.getProviderReference());
         assertEquals(PaymentType.BOOKING_PAYMENT, response.getPaymentType());
         assertEquals(PaymentMethod.CARD, response.getPaymentMethod());
         assertEquals(250.0, response.getAmount());
         assertEquals(PaymentStatus.PENDING, response.getPaymentStatus());
-        verify(paymentRepository).findById(41L);
+        verify(paymentRepository).findById(uuid(41));
         verifyNoInteractions(eventPublisherService, bookingService);
     }
 
     @Test
     @DisplayName("Reports a missing payment when retrieving by ID")
     void getPaymentMissing() {
-        when(paymentRepository.findById(404L)).thenReturn(Optional.empty());
+        when(paymentRepository.findById(uuid(404))).thenReturn(Optional.empty());
 
-        assertThrows(ResourceNotFoundException.class, () -> paymentService.getPayment(404L));
+        assertThrows(ResourceNotFoundException.class, () -> paymentService.getPayment(uuid(404)));
 
-        verify(paymentRepository).findById(404L);
+        verify(paymentRepository).findById(uuid(404));
         verifyNoInteractions(eventPublisherService, bookingService);
     }
 
@@ -80,37 +85,37 @@ class PaymentServiceTest {
     @DisplayName("Marks a booking payment successful, confirms its booking, and publishes an audit event")
     void updateBookingPaymentSuccess() {
         Payment payment = payment();
-        when(paymentRepository.findByIdForUpdate(41L)).thenReturn(Optional.of(payment));
+        when(paymentRepository.findByIdForUpdate(uuid(41))).thenReturn(Optional.of(payment));
         when(paymentRepository.save(payment)).thenReturn(payment);
 
         PaymentResponse response = paymentService.updatePaymentStatus(
-                41L, new PaymentStatusUpdateRequest(PaymentStatus.SUCCESS));
+                uuid(41), new PaymentStatusUpdateRequest(PaymentStatus.SUCCESS));
 
         assertEquals(PaymentStatus.SUCCESS, response.getPaymentStatus());
         assertEquals(PaymentStatus.SUCCESS, payment.getPaymentStatus());
-        verify(bookingService).confirmBookingAfterPaymentSuccess(17L, 41L);
-        verify(bookingService, never()).cancelBookingAfterPaymentFailure(17L, 41L);
+        verify(bookingService).confirmBookingAfterPaymentSuccess(uuid(17), uuid(41));
+        verify(bookingService, never()).cancelBookingAfterPaymentFailure(uuid(17), uuid(41));
         verify(eventPublisherService).publishEvent(
-                eq("PAYMENT_STATUS_UPDATED"), eq("Payment"), eq("41"),
-                isNull(), isNull(), eq(41L), eq(17L), eq(8L), eq(response));
+                eq("PAYMENT_STATUS_UPDATED"), eq("Payment"), eq(uuid(41).toString()),
+                isNull(), isNull(), eq(uuid(41)), eq(uuid(17)), eq(uuid(8)), eq(response));
     }
 
     @Test
     @DisplayName("Marks a booking payment failed, cancels its booking, and publishes an audit event")
     void updateBookingPaymentFailure() {
         Payment payment = payment();
-        when(paymentRepository.findByIdForUpdate(41L)).thenReturn(Optional.of(payment));
+        when(paymentRepository.findByIdForUpdate(uuid(41))).thenReturn(Optional.of(payment));
         when(paymentRepository.save(payment)).thenReturn(payment);
 
         PaymentResponse response = paymentService.updatePaymentStatus(
-                41L, new PaymentStatusUpdateRequest(PaymentStatus.FAILED));
+                uuid(41), new PaymentStatusUpdateRequest(PaymentStatus.FAILED));
 
         assertEquals(PaymentStatus.FAILED, response.getPaymentStatus());
-        verify(bookingService).cancelBookingAfterPaymentFailure(17L, 41L);
-        verify(bookingService, never()).confirmBookingAfterPaymentSuccess(17L, 41L);
+        verify(bookingService).cancelBookingAfterPaymentFailure(uuid(17), uuid(41));
+        verify(bookingService, never()).confirmBookingAfterPaymentSuccess(uuid(17), uuid(41));
         verify(eventPublisherService).publishEvent(
-                eq("PAYMENT_STATUS_UPDATED"), eq("Payment"), eq("41"),
-                isNull(), isNull(), eq(41L), eq(17L), eq(8L), eq(response));
+                eq("PAYMENT_STATUS_UPDATED"), eq("Payment"), eq(uuid(41).toString()),
+                isNull(), isNull(), eq(uuid(41)), eq(uuid(17)), eq(uuid(8)), eq(response));
     }
 
     @Test
@@ -119,19 +124,19 @@ class PaymentServiceTest {
         Payment payment = payment();
         payment.setPaymentType(PaymentType.CANCEL_REFUND);
         payment.setBookingId(null);
-        payment.setBookingSeriesId(8L);
-        when(paymentRepository.findByIdForUpdate(41L)).thenReturn(Optional.of(payment));
+        payment.setBookingSeriesId(uuid(8));
+        when(paymentRepository.findByIdForUpdate(uuid(41))).thenReturn(Optional.of(payment));
         when(paymentRepository.save(payment)).thenReturn(payment);
 
         PaymentResponse response = paymentService.updatePaymentStatus(
-                41L, new PaymentStatusUpdateRequest(PaymentStatus.SUCCESS));
+                uuid(41), new PaymentStatusUpdateRequest(PaymentStatus.SUCCESS));
 
         assertEquals(PaymentType.CANCEL_REFUND, response.getPaymentType());
         assertEquals(PaymentStatus.SUCCESS, response.getPaymentStatus());
         verifyNoInteractions(bookingService);
         verify(eventPublisherService).publishEvent(
-                eq("PAYMENT_STATUS_UPDATED"), eq("Payment"), eq("41"),
-                isNull(), isNull(), eq(41L), isNull(), eq(8L), eq(response));
+                eq("PAYMENT_STATUS_UPDATED"), eq("Payment"), eq(uuid(41).toString()),
+                isNull(), isNull(), eq(uuid(41)), isNull(), eq(uuid(8)), eq(response));
     }
 
     @ParameterizedTest
@@ -139,7 +144,7 @@ class PaymentServiceTest {
     @DisplayName("Rejects requested outcomes other than success or failure")
     void updatePaymentInvalidOutcome(PaymentStatus status) {
         assertThrows(InvalidRequestException.class, () -> paymentService.updatePaymentStatus(
-                41L, new PaymentStatusUpdateRequest(status)));
+                uuid(41), new PaymentStatusUpdateRequest(status)));
 
         verifyNoInteractions(paymentRepository, eventPublisherService, bookingService);
     }
@@ -147,12 +152,12 @@ class PaymentServiceTest {
     @Test
     @DisplayName("Reports a missing payment when updating its status")
     void updatePaymentMissing() {
-        when(paymentRepository.findByIdForUpdate(404L)).thenReturn(Optional.empty());
+        when(paymentRepository.findByIdForUpdate(uuid(404))).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> paymentService.updatePaymentStatus(
-                404L, new PaymentStatusUpdateRequest(PaymentStatus.SUCCESS)));
+                uuid(404), new PaymentStatusUpdateRequest(PaymentStatus.SUCCESS)));
 
-        verify(paymentRepository).findByIdForUpdate(404L);
+        verify(paymentRepository).findByIdForUpdate(uuid(404));
         verifyNoInteractions(eventPublisherService, bookingService);
     }
 
@@ -161,10 +166,10 @@ class PaymentServiceTest {
     void updatePaymentAlreadyFinal() {
         Payment payment = payment();
         payment.setPaymentStatus(PaymentStatus.SUCCESS);
-        when(paymentRepository.findByIdForUpdate(41L)).thenReturn(Optional.of(payment));
+        when(paymentRepository.findByIdForUpdate(uuid(41))).thenReturn(Optional.of(payment));
 
         assertThrows(ConflictException.class, () -> paymentService.updatePaymentStatus(
-                41L, new PaymentStatusUpdateRequest(PaymentStatus.FAILED)));
+                uuid(41), new PaymentStatusUpdateRequest(PaymentStatus.FAILED)));
 
         verify(paymentRepository, never()).save(payment);
         verifyNoInteractions(eventPublisherService, bookingService);
@@ -172,9 +177,9 @@ class PaymentServiceTest {
 
     private Payment payment() {
         return Payment.builder()
-                .id(41L)
-                .bookingId(17L)
-                .bookingSeriesId(8L)
+                .id(uuid(41))
+                .bookingId(uuid(17))
+                .bookingSeriesId(uuid(8))
                 .providerReference("MOCK-CARD-REF-41")
                 .paymentType(PaymentType.BOOKING_PAYMENT)
                 .relatedPaymentId(null)

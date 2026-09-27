@@ -12,6 +12,7 @@ import com.househelper.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -22,12 +23,12 @@ public class PaymentService {
     private final BookingService bookingService;
 
     @Transactional(readOnly = true)
-    public PaymentResponse getPayment(Long paymentId) {
+    public PaymentResponse getPayment(UUID paymentId) {
         return toResponse(requirePayment(paymentId));
     }
 
     @Transactional
-    public PaymentResponse updatePaymentStatus(Long paymentId, PaymentStatusUpdateRequest request) {
+    public PaymentResponse updatePaymentStatus(UUID paymentId, PaymentStatusUpdateRequest request) {
         PaymentStatus requestedStatus = request.getStatus();
         if (requestedStatus != PaymentStatus.SUCCESS && requestedStatus != PaymentStatus.FAILED) {
             throw new InvalidRequestException("Mock payment processing only accepts SUCCESS or FAILED.");
@@ -54,7 +55,7 @@ public class PaymentService {
         return response;
     }
 
-    private Payment requirePayment(Long paymentId) {
+    private Payment requirePayment(UUID paymentId) {
         return paymentRepository.findById(paymentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment " + paymentId + " was not found."));
     }

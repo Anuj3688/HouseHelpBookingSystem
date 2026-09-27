@@ -11,13 +11,14 @@ import lombok.Data;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.UUID;
 
 @Data
 public class BookingSeriesRequest {
 
     @NotNull
     @Positive
-    private Long customerId;
+    private UUID customerId;
 
     @NotBlank
     private String locality;

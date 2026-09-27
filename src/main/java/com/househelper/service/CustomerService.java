@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -43,27 +44,28 @@ public class CustomerService {
     }
 
     @Transactional(readOnly = true)
-    public CustomerResponse getCustomer(Long customerId) {
+    public CustomerResponse getCustomer(UUID customerId) {
         return toResponse(requireCustomer(customerId));
     }
 
     @Transactional(readOnly = true)
-    public List<BookingResponse> getCustomerBookings(Long customerId) {
+    public List<BookingResponse> getCustomerBookings(UUID customerId) {
         requireCustomer(customerId);
         List<Booking> bookings = bookingRepository.findByCustomer_IdOrderByBookingDateAscStartTimeAsc(customerId);
-        Map<Long, Long> initialPaymentIds = bookings.isEmpty()
+        Map<UUID, UUID> initialPaymentIds = bookings.isEmpty()
                 ? Map.of()
                 : paymentRepository.findByBookingIdIn(bookings.stream().map(Booking::getId).toList())
                         .stream()
                         .filter(payment -> payment.getPaymentType() == PaymentType.BOOKING_PAYMENT)
-                        .collect(Collectors.toMap(Payment::getBookingId, Payment::getId, Long::min));
+                        .collect(Collectors.toMap(Payment::getBookingId, Payment::getId, (left, right) ->
+                                left.compareTo(right) <= 0 ? left : right));
         return bookings.stream()
                 .map(booking -> toBookingResponse(booking, initialPaymentIds.get(booking.getId())))
                 .toList();
     }
 
     @Transactional
-    public CustomerResponse updateCustomer(Long customerId, CustomerRequest request) {
+    public CustomerResponse updateCustomer(UUID customerId, CustomerRequest request) {
         Customer customer = requireCustomer(customerId);
         customer.setName(request.getName().trim());
         customer.setAddress(request.getAddress().trim());
@@ -71,7 +73,7 @@ public class CustomerService {
     }
 
     @Transactional
-    public void deleteCustomer(Long customerId) {
+    public void deleteCustomer(UUID customerId) {
         Customer customer = requireCustomer(customerId);
         if (bookingRepository.existsByCustomer_Id(customerId)) {
             throw new ConflictException("A customer with booking history cannot be deleted.");
@@ -79,7 +81,7 @@ public class CustomerService {
         customerRepository.delete(customer);
     }
 
-    private Customer requireCustomer(Long customerId) {
+    private Customer requireCustomer(UUID customerId) {
         return customerRepository.findById(customerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Customer " + customerId + " was not found."));
     }
@@ -92,7 +94,7 @@ public class CustomerService {
                 .build();
     }
 
-    private BookingResponse toBookingResponse(Booking booking, Long paymentId) {
+    private BookingResponse toBookingResponse(Booking booking, UUID paymentId) {
         return BookingResponse.builder()
                 .id(booking.getId())
                 .seriesId(booking.getBookingSeries() == null ? null : booking.getBookingSeries().getId())

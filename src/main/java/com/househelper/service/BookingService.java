@@ -38,6 +38,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.UUID;
 
 @Service
 @Slf4j
@@ -77,17 +78,17 @@ public class BookingService {
                 createBookingInTransaction(request, series)));
     }
 
-    public BookingResponse rescheduleBooking(Long bookingId, RescheduleRequest request) {
+    public BookingResponse rescheduleBooking(UUID bookingId, RescheduleRequest request) {
         validatePeriod(request.getNewStartTime(), request.getNewEndTime());
         return withOptimisticRetries(() -> rescheduleBookingAttempt(bookingId, request));
     }
 
-    public BookingResponse cancelBooking(Long bookingId) {
+    public BookingResponse cancelBooking(UUID bookingId) {
         return transactionTemplate.execute(status -> cancelBookingInTransaction(bookingId));
     }
 
     @Transactional
-    public void cancelBookingAfterPaymentFailure(Long bookingId, Long failedPaymentId) {
+    public void cancelBookingAfterPaymentFailure(UUID bookingId, UUID failedPaymentId) {
         Booking booking = requireBooking(bookingId);
         if (booking.getStatus() == BookingStatus.CANCELLED) {
             return;
@@ -112,11 +113,11 @@ public class BookingService {
     }
 
     @Transactional
-    public void confirmBookingAfterPaymentSuccess(Long bookingId, Long paymentId) {
+    public void confirmBookingAfterPaymentSuccess(UUID bookingId, UUID paymentId) {
         Booking booking = requireBooking(bookingId);
         if (booking.getStatus() == BookingStatus.CANCELLED) {
             Optional<Payment> refund;
-            Long seriesId = booking.getBookingSeries() == null ? null : booking.getBookingSeries().getId();
+            UUID seriesId = booking.getBookingSeries() == null ? null : booking.getBookingSeries().getId();
             if (seriesId == null) {
                 refund = paymentRecordService.createCancellationRefund(bookingId, null, null);
             } else {
@@ -179,11 +180,11 @@ public class BookingService {
         return saveAndPublish(booking, "BOOKING_CREATED", payment.getId(), response -> response);
     }
 
-    private BookingResponse rescheduleBookingAttempt(Long bookingId, RescheduleRequest request) {
+    private BookingResponse rescheduleBookingAttempt(UUID bookingId, RescheduleRequest request) {
         return transactionTemplate.execute(status -> rescheduleInTransaction(bookingId, request));
     }
 
-    private BookingResponse rescheduleInTransaction(Long bookingId, RescheduleRequest request) {
+    private BookingResponse rescheduleInTransaction(UUID bookingId, RescheduleRequest request) {
         Booking booking = requireBooking(bookingId);
         validateCanReschedule(booking, request);
 
@@ -205,7 +206,7 @@ public class BookingService {
                 updatedResponse -> Map.of("booking", updatedResponse, "priceDelta", delta));
     }
 
-    private Booking requireBooking(Long bookingId) {
+    private Booking requireBooking(UUID bookingId) {
         return bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new ResourceNotFoundException("Booking " + bookingId + " was not found."));
     }
@@ -265,7 +266,7 @@ public class BookingService {
 
     private BookingResponse saveAndPublish(Booking booking,
                                            String eventType,
-                                           Long paymentId,
+                                           UUID paymentId,
                                            Function<BookingResponse, Object> eventPayloadFactory) {
         bookingRepository.save(booking);
         BookingResponse response = toResponse(booking);
@@ -277,7 +278,7 @@ public class BookingService {
         return response;
     }
 
-    private BookingResponse cancelBookingInTransaction(Long bookingId) {
+    private BookingResponse cancelBookingInTransaction(UUID bookingId) {
         Booking booking = requireBooking(bookingId);
         if (booking.getStatus() == BookingStatus.CANCELLED) {
             throw new ConflictException("Booking " + bookingId + " is already cancelled.");
@@ -287,7 +288,7 @@ public class BookingService {
         booking.setStatus(BookingStatus.CANCELLED);
 
         List<Payment> payments = paymentRecordService.findPaymentsForBooking(bookingId);
-        List<Long> paymentIds = payments.stream().map(Payment::getId).toList();
+        List<UUID> paymentIds = payments.stream().map(Payment::getId).toList();
         Optional<Payment> refund = paymentRecordService.createCancellationRefund(bookingId,
                 booking.getBookingSeries() == null ? null : booking.getBookingSeries().getId(), null);
         return saveAndPublish(booking, "BOOKING_CANCELLED", null,

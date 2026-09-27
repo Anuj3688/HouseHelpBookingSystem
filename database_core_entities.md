@@ -11,7 +11,7 @@ Booking lifecycle ──> SystemEvent audit snapshots
 
 ## Entities
 
-- **Customer:** Generated numeric ID, name, and address. Customers with booking history cannot be deleted.
+- **Customer:** Generated UUID, name, and address. Customers with booking history cannot be deleted.
 - **Helper:** Name, unique phone, gender (`FEMALE`, `MALE`, or `OTHER`), localities (maximum three), skills, hourly rate, cumulative rating total and count (average calculated on read), and AES-GCM encrypted government ID proof.
 - **HelperAvailability:** Helper, date, start/end time, status (`AVAILABLE` or `BOOKED`), and optimistic-locking version.
 - **BookingSeries:** Customer, weekly start date and time, requested occurrence count, lifecycle status, and optimistic-locking version.
@@ -21,7 +21,7 @@ Booking lifecycle ──> SystemEvent audit snapshots
 
 ## Customer-aware booking
 
-Bookings reference an existing customer through a JPA `ManyToOne` relationship. The booking request accepts the generated numeric `customerId`; a nonexistent customer is rejected.
+Entity primary keys and exposed relationship identifiers use generated UUIDs. Bookings reference an existing customer through a JPA `ManyToOne` relationship. The booking request accepts the customer's UUID as `customerId`; a nonexistent customer is rejected.
 
 ## Housekeeping views
 

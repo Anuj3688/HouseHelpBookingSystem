@@ -37,6 +37,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -53,9 +54,13 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class BookingServiceTest {
 
-    private static final Long CUSTOMER_ID = 11L;
-    private static final Long HELPER_ID = 22L;
-    private static final Long BOOKING_ID = 33L;
+    private static UUID uuid(long value) {
+        return UUID.nameUUIDFromBytes(("test-id-" + value).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    private static final UUID CUSTOMER_ID = uuid(11);
+    private static final UUID HELPER_ID = uuid(22);
+    private static final UUID BOOKING_ID = uuid(33);
     private static final LocalDate BOOKING_DATE = LocalDate.of(2026, 10, 5);
     private static final LocalTime START_TIME = LocalTime.of(9, 0);
     private static final LocalTime END_TIME = LocalTime.of(10, 0);
@@ -92,13 +97,13 @@ class BookingServiceTest {
     @DisplayName("Creates a pending booking, reserves its slot, and starts a method-specific payment")
     void createBooking() {
         Customer customer = customer();
-        HelperAvailability slot = slot(51L, helper(350.0), BOOKING_DATE, START_TIME, END_TIME);
-        Payment payment = payment(71L, BOOKING_ID, null, PaymentType.BOOKING_PAYMENT);
+        HelperAvailability slot = slot(uuid(51), helper(350.0), BOOKING_DATE, START_TIME, END_TIME);
+        Payment payment = payment(uuid(71), BOOKING_ID, null, PaymentType.BOOKING_PAYMENT);
         when(customerRepository.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer));
         when(availabilityRepository.findAvailableHelpersForSlot(
                 "Central", SkillType.CLEANING, BOOKING_DATE, START_TIME, END_TIME, AvailabilityStatus.AVAILABLE))
                 .thenReturn(List.of(slot));
-        when(availabilityRepository.findById(51L)).thenReturn(Optional.of(slot));
+        when(availabilityRepository.findById(uuid(51))).thenReturn(Optional.of(slot));
         when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> {
             Booking saved = invocation.getArgument(0);
             saved.setId(BOOKING_ID);
@@ -116,7 +121,7 @@ class BookingServiceTest {
         assertEquals(HELPER_ID, response.getAssignedHelperId());
         assertEquals(350.0, response.getTotalAmount());
         assertEquals(BookingStatus.PENDING_PAYMENT, response.getStatus());
-        assertEquals(71L, response.getPaymentId());
+        assertEquals(uuid(71), response.getPaymentId());
         assertEquals(AvailabilityStatus.BOOKED, slot.getStatus());
         verify(paymentRecordService).createBookingPayment(
                 eq(BOOKING_ID), isNull(),
@@ -124,39 +129,39 @@ class BookingServiceTest {
                 eq(PaymentMethod.UPI));
         verify(eventPublisherService).publishEvent(
                 eq("BOOKING_CREATED"), eq("Booking"), eq(BOOKING_ID.toString()),
-                eq(HELPER_ID), eq(CUSTOMER_ID), eq(71L), eq(BOOKING_ID),
+                eq(HELPER_ID), eq(CUSTOMER_ID), eq(uuid(71)), eq(BOOKING_ID),
                 isNull(), any(BookingResponse.class));
     }
 
     @Test
     @DisplayName("Links a recurring occurrence to its series and creates an independent payment")
     void createRecurringOccurrence() {
-        BookingSeries series = BookingSeries.builder().id(88L).customer(customer()).build();
+        BookingSeries series = BookingSeries.builder().id(uuid(88)).customer(customer()).build();
         Customer customer = customer();
-        HelperAvailability slot = slot(51L, helper(200.0), BOOKING_DATE, START_TIME, END_TIME);
-        Payment payment = payment(71L, BOOKING_ID, 88L, PaymentType.BOOKING_PAYMENT);
+        HelperAvailability slot = slot(uuid(51), helper(200.0), BOOKING_DATE, START_TIME, END_TIME);
+        Payment payment = payment(uuid(71), BOOKING_ID, uuid(88), PaymentType.BOOKING_PAYMENT);
         when(customerRepository.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer));
         when(availabilityRepository.findAvailableHelpersForSlot(
                 "Central", SkillType.CLEANING, BOOKING_DATE, START_TIME, END_TIME, AvailabilityStatus.AVAILABLE))
                 .thenReturn(List.of(slot));
-        when(availabilityRepository.findById(51L)).thenReturn(Optional.of(slot));
+        when(availabilityRepository.findById(uuid(51))).thenReturn(Optional.of(slot));
         when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> {
             Booking saved = invocation.getArgument(0);
             saved.setId(BOOKING_ID);
             return saved;
         });
         when(paymentRecordService.createBookingPayment(
-                eq(BOOKING_ID), eq(88L),
+                eq(BOOKING_ID), eq(uuid(88)),
                 argThat(amount -> amount.compareTo(BigDecimal.valueOf(200.0)) == 0),
                 eq(PaymentMethod.CARD))).thenReturn(payment);
 
         BookingResponse response = bookingService.createRecurringBookingOccurrence(series, request(PaymentMethod.CARD));
 
-        assertEquals(88L, response.getSeriesId());
-        assertEquals(71L, response.getPaymentId());
+        assertEquals(uuid(88), response.getSeriesId());
+        assertEquals(uuid(71), response.getPaymentId());
         assertEquals(BookingStatus.PENDING_PAYMENT, response.getStatus());
         verify(paymentRecordService).createBookingPayment(
-                eq(BOOKING_ID), eq(88L),
+                eq(BOOKING_ID), eq(uuid(88)),
                 argThat(amount -> amount.compareTo(BigDecimal.valueOf(200.0)) == 0),
                 eq(PaymentMethod.CARD));
     }
@@ -203,13 +208,13 @@ class BookingServiceTest {
         Booking booking = booking(BookingStatus.PENDING_PAYMENT, null);
         when(bookingRepository.findById(BOOKING_ID)).thenReturn(Optional.of(booking));
 
-        bookingService.confirmBookingAfterPaymentSuccess(BOOKING_ID, 71L);
+        bookingService.confirmBookingAfterPaymentSuccess(BOOKING_ID, uuid(71));
 
         assertEquals(BookingStatus.CONFIRMED, booking.getStatus());
         verify(bookingRepository).save(booking);
         verify(eventPublisherService).publishEvent(
                 eq("BOOKING_CONFIRMED_AFTER_PAYMENT"), eq("Booking"), eq(BOOKING_ID.toString()),
-                eq(HELPER_ID), eq(CUSTOMER_ID), eq(71L), eq(BOOKING_ID), isNull(),
+                eq(HELPER_ID), eq(CUSTOMER_ID), eq(uuid(71)), eq(BOOKING_ID), isNull(),
                 any(BookingResponse.class));
     }
 
@@ -221,44 +226,44 @@ class BookingServiceTest {
         when(paymentRecordService.createCancellationRefund(BOOKING_ID, null, null))
                 .thenReturn(Optional.empty());
 
-        bookingService.confirmBookingAfterPaymentSuccess(BOOKING_ID, 71L);
+        bookingService.confirmBookingAfterPaymentSuccess(BOOKING_ID, uuid(71));
 
         assertEquals(BookingStatus.CANCELLED, booking.getStatus());
         verify(bookingRepository, never()).save(booking);
         verify(paymentRecordService).createCancellationRefund(BOOKING_ID, null, null);
         verify(eventPublisherService).publishEvent(
                 eq("PAYMENT_SUCCEEDED_AFTER_BOOKING_CANCELLATION"), eq("Booking"), eq(BOOKING_ID.toString()),
-                eq(HELPER_ID), eq(CUSTOMER_ID), eq(71L), eq(BOOKING_ID), isNull(), any());
+                eq(HELPER_ID), eq(CUSTOMER_ID), eq(uuid(71)), eq(BOOKING_ID), isNull(), any());
     }
 
     @Test
     @DisplayName("Cancels a booking after payment failure, releases its slot, and records the audit event")
     void cancelAfterPaymentFailure() {
         Booking booking = booking(BookingStatus.PENDING_PAYMENT, null);
-        HelperAvailability slot = slot(51L, helper(350.0), BOOKING_DATE, START_TIME, END_TIME);
+        HelperAvailability slot = slot(uuid(51), helper(350.0), BOOKING_DATE, START_TIME, END_TIME);
         when(bookingRepository.findById(BOOKING_ID)).thenReturn(Optional.of(booking));
         when(availabilityRepository.findByHelperIdAndSlotDateAndStartTime(HELPER_ID, BOOKING_DATE, START_TIME))
                 .thenReturn(Optional.of(slot));
-        when(paymentRecordService.createCancellationRefund(BOOKING_ID, null, 71L))
+        when(paymentRecordService.createCancellationRefund(BOOKING_ID, null, uuid(71)))
                 .thenReturn(Optional.empty());
 
-        bookingService.cancelBookingAfterPaymentFailure(BOOKING_ID, 71L);
+        bookingService.cancelBookingAfterPaymentFailure(BOOKING_ID, uuid(71));
 
         assertEquals(BookingStatus.CANCELLED, booking.getStatus());
         assertEquals(AvailabilityStatus.AVAILABLE, slot.getStatus());
         verify(bookingRepository).save(booking);
-        verify(paymentRecordService).createCancellationRefund(BOOKING_ID, null, 71L);
+        verify(paymentRecordService).createCancellationRefund(BOOKING_ID, null, uuid(71));
         verify(eventPublisherService).publishEvent(
                 eq("BOOKING_CANCELLED_AFTER_PAYMENT_FAILURE"), eq("Booking"), eq(BOOKING_ID.toString()),
-                eq(HELPER_ID), eq(CUSTOMER_ID), eq(71L), eq(BOOKING_ID), isNull(), any());
+                eq(HELPER_ID), eq(CUSTOMER_ID), eq(uuid(71)), eq(BOOKING_ID), isNull(), any());
     }
 
     @Test
     @DisplayName("Releases a booking slot, records a refund request, and returns the cancelled booking")
     void cancelBooking() {
         Booking booking = booking(BookingStatus.CONFIRMED, null);
-        HelperAvailability slot = slot(51L, helper(350.0), BOOKING_DATE, START_TIME, END_TIME);
-        Payment refund = payment(72L, BOOKING_ID, null, PaymentType.CANCEL_REFUND);
+        HelperAvailability slot = slot(uuid(51), helper(350.0), BOOKING_DATE, START_TIME, END_TIME);
+        Payment refund = payment(uuid(72), BOOKING_ID, null, PaymentType.CANCEL_REFUND);
         when(bookingRepository.findById(BOOKING_ID)).thenReturn(Optional.of(booking));
         when(availabilityRepository.findByHelperIdAndSlotDateAndStartTime(HELPER_ID, BOOKING_DATE, START_TIME))
                 .thenReturn(Optional.of(slot));
@@ -292,18 +297,18 @@ class BookingServiceTest {
     @DisplayName("Reschedules a booking, releases the old slot, and records the price increase")
     void rescheduleBooking() {
         Booking booking = booking(BookingStatus.CONFIRMED, null);
-        HelperAvailability oldSlot = slot(51L, helper(100.0), BOOKING_DATE, START_TIME, END_TIME);
+        HelperAvailability oldSlot = slot(uuid(51), helper(100.0), BOOKING_DATE, START_TIME, END_TIME);
         LocalDate newDate = BOOKING_DATE.plusDays(1);
         LocalTime newStart = LocalTime.of(10, 0);
         LocalTime newEnd = LocalTime.of(11, 0);
-        HelperAvailability newSlot = slot(52L, helper(11L, 150.0), newDate, newStart, newEnd);
-        Payment adjustment = payment(73L, BOOKING_ID, null, PaymentType.RESCHEDULE_PAYMENT);
+        HelperAvailability newSlot = slot(uuid(52), helper(uuid(11), 150.0), newDate, newStart, newEnd);
+        Payment adjustment = payment(uuid(73), BOOKING_ID, null, PaymentType.RESCHEDULE_PAYMENT);
         RescheduleRequest request = new RescheduleRequest(newDate, newStart, newEnd);
         when(bookingRepository.findById(BOOKING_ID)).thenReturn(Optional.of(booking));
         when(availabilityRepository.findAvailableHelpersForSlot(
                 "Central", SkillType.CLEANING, newDate, newStart, newEnd, AvailabilityStatus.AVAILABLE))
                 .thenReturn(List.of(newSlot));
-        when(availabilityRepository.findById(52L)).thenReturn(Optional.of(newSlot));
+        when(availabilityRepository.findById(uuid(52))).thenReturn(Optional.of(newSlot));
         when(availabilityRepository.findByHelperIdAndSlotDateAndStartTime(HELPER_ID, BOOKING_DATE, START_TIME))
                 .thenReturn(Optional.of(oldSlot));
         when(paymentRecordService.createRescheduleAdjustment(
@@ -315,11 +320,11 @@ class BookingServiceTest {
 
         assertEquals(BookingStatus.RESCHEDULED, response.getStatus());
         assertEquals(newDate, response.getBookingDate());
-        assertEquals(11L, response.getAssignedHelperId());
+        assertEquals(uuid(11), response.getAssignedHelperId());
         assertEquals(150.0, response.getTotalAmount());
         assertEquals(AvailabilityStatus.AVAILABLE, oldSlot.getStatus());
         assertEquals(AvailabilityStatus.BOOKED, newSlot.getStatus());
-        assertEquals(73L, response.getPaymentId());
+        assertEquals(uuid(73), response.getPaymentId());
         verify(paymentRecordService).createRescheduleAdjustment(
                 eq(BOOKING_ID), isNull(),
                 argThat(amount -> amount.compareTo(BigDecimal.valueOf(50.0)) == 0));
@@ -372,7 +377,7 @@ class BookingServiceTest {
         when(bookingRepository.findById(BOOKING_ID)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class,
-                () -> bookingService.confirmBookingAfterPaymentSuccess(BOOKING_ID, 71L));
+                () -> bookingService.confirmBookingAfterPaymentSuccess(BOOKING_ID, uuid(71)));
 
         verifyNoInteractions(availabilityRepository, paymentRecordService, eventPublisherService);
     }
@@ -397,7 +402,7 @@ class BookingServiceTest {
         return helper(HELPER_ID, hourlyRate);
     }
 
-    private Helper helper(Long id, Double hourlyRate) {
+    private Helper helper(UUID id, Double hourlyRate) {
         return Helper.builder()
                 .id(id)
                 .name("Helper")
@@ -406,7 +411,7 @@ class BookingServiceTest {
                 .build();
     }
 
-    private HelperAvailability slot(Long id, Helper helper, LocalDate date, LocalTime start, LocalTime end) {
+    private HelperAvailability slot(UUID id, Helper helper, LocalDate date, LocalTime start, LocalTime end) {
         return HelperAvailability.builder()
                 .id(id)
                 .helper(helper)
@@ -433,7 +438,7 @@ class BookingServiceTest {
                 .build();
     }
 
-    private Payment payment(Long id, Long bookingId, Long seriesId, PaymentType paymentType) {
+    private Payment payment(UUID id, UUID bookingId, UUID seriesId, PaymentType paymentType) {
         return Payment.builder()
                 .id(id)
                 .bookingId(bookingId)
