@@ -1,23 +1,15 @@
 package com.househelper.dto;
 
-import com.househelper.model.SkillType;
 import com.househelper.model.PaymentMethod;
+import com.househelper.model.SkillType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 
-import java.time.LocalDate;
-import java.time.LocalTime;
 import java.util.UUID;
 
 @Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
-public class BookingRequest {
+public class InstantBookingRequest {
 
     @NotNull
     private UUID customerId;
@@ -27,15 +19,6 @@ public class BookingRequest {
 
     @NotNull
     private SkillType skill;
-
-    @NotNull
-    private LocalDate bookingDate;
-
-    @NotNull
-    private LocalTime startTime;
-
-    @NotNull
-    private LocalTime endTime;
 
     @NotNull
     private PaymentMethod paymentMethod;

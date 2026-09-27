@@ -1,6 +1,8 @@
 package com.househelper.model;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -20,6 +22,9 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.DayOfWeek;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 @Entity
@@ -54,6 +59,13 @@ public class BookingSeries {
     @NotNull
     @Column(name = "occurrence_count", nullable = false)
     private Integer occurrenceCount;
+
+    @ElementCollection
+    @CollectionTable(name = "booking_series_days")
+    @Enumerated(EnumType.STRING)
+    @Column(name = "day_of_week", nullable = false)
+    @Builder.Default
+    private Set<DayOfWeek> recurrenceDays = new HashSet<>();
 
     @NotNull
     @Enumerated(EnumType.STRING)

@@ -12,7 +12,7 @@ Booking / BookingSeries ──> Payment records (linked by IDs)
 Booking / BookingSeries / Helper workflows ──> SystemEvent audit records
 ```
 
-Bookings reference a customer through a required JPA `ManyToOne` relationship and may reference a booking series. A series belongs to a customer and groups its weekly booking occurrences. The assigned helper is stored as `assignedHelperId`. Availability references a helper through `ManyToOne`. Payment and audit event associations are represented by IDs/aggregate fields rather than JPA entity relationships.
+Bookings reference a customer through a required JPA `ManyToOne` relationship and may reference a booking series. A series belongs to a customer and groups occurrences scheduled on its selected weekdays. The assigned helper is stored as `assignedHelperId`. Availability references a helper through `ManyToOne`. Payment and audit event associations are represented by IDs/aggregate fields rather than JPA entity relationships.
 
 ## `Customer`
 
@@ -72,6 +72,7 @@ The combination of helper, date, and start time is unique. Availability accepts 
 | `startTime`, `endTime` | `LocalTime` | Required. |
 | `totalAmount` | `Double` | Required; non-negative. |
 | `status` | `BookingStatus` | Required enum string. |
+| `bookingType` | `BookingType` | Required enum string: `INSTANT`, `SCHEDULED`, or `RECURRING`. |
 | `version` | `Long` | JPA `@Version` optimistic locking field. |
 
 `BookingStatus` values: `PENDING_PAYMENT`, `CONFIRMED`, `CANCELLED`, `RESCHEDULED`. A new booking is pending while its booking payment is pending; successful payment confirms it and a failed booking payment cancels it and releases the slot.
@@ -84,11 +85,12 @@ The combination of helper, date, and start time is unique. Availability accepts 
 | `customer` | `Customer` | Required `ManyToOne`, stored as `customer_id`. |
 | `startDate` | `LocalDate` | Required; first occurrence date. |
 | `startTime`, `endTime` | `LocalTime` | Required; shared by all requested occurrences. |
-| `occurrenceCount` | `Integer` | Required; API accepts 1–52 weekly occurrences. |
+| `occurrenceCount` | `Integer` | Required; API accepts 1–52 occurrences. |
+| `recurrenceDays` | `Set<DayOfWeek>` | Selected weekdays, stored as enum strings; defaults to the weekday of `startDate`. |
 | `status` | `BookingSeriesStatus` | Required enum string: `ACTIVE` or `CANCELLED`. |
 | `version` | `Long` | JPA `@Version` optimistic locking field. |
 
-The `POST /api/booking-series` operation independently attempts the start date and subsequent dates spaced one week apart. Missing availability is returned as `unavailableDates`; other failures are surfaced. Cancelling an individual booking uses the standard booking cancellation route. Cancelling the series locks the series, releases all active occurrence slots, cancels those bookings, and creates at most one consolidated refund request for the successful charges in that operation.
+The `POST /api/booking-series` operation independently attempts each matching weekday from `startDate` until the requested occurrence count is reached. Missing availability is returned as `unavailableDates`; other failures are surfaced. Cancelling an individual booking uses the standard booking cancellation route. Cancelling the series locks the series, releases all active occurrence slots, cancels those bookings, and creates at most one consolidated refund request for the successful charges in that operation.
 
 ## `Payment`
 
@@ -105,7 +107,7 @@ The `POST /api/booking-series` operation independently attempts the start date a
 | `paymentStatus` | `PaymentStatus` | Required enum string. |
 | `version` | `Long` | JPA `@Version` field. |
 
-`PaymentStatus` values: `PENDING`, `SUCCESS`, `FAILED`, `REFUNDED` (the last value is retained for compatibility with older records). `PaymentMethod` values are `CARD`, `UPI`, and `WALLET`. Each has a `PaymentMethodProcessor`; the current implementations create mock references and pending records, not real payment transactions. Cancellation creates at most one pending refund record per cancellation operation for the remaining refundable balance, and negative reschedule adjustments create a separate pending refund record; original payment records are not overwritten. The mock payment resource allows pending charges and refund requests to transition to `SUCCESS` or `FAILED`. Weekly booking series are modeled by `BookingSeries`; each successfully allocated occurrence has an independent `BOOKING_PAYMENT`. The initial full-refund behavior is implemented by the replaceable `CancellationRefundPolicy`.
+`PaymentStatus` values: `PENDING`, `SUCCESS`, `FAILED`, `REFUNDED` (the last value is retained for compatibility with older records). `PaymentMethod` values are `CARD`, `UPI`, and `WALLET`. Each has a `PaymentMethodProcessor`; the current implementations create mock references and pending records, not real payment transactions. Cancellation creates at most one pending refund record per cancellation operation for the remaining refundable balance, and negative reschedule adjustments create a separate pending refund record; original payment records are not overwritten. The mock payment resource allows pending charges and refund requests to transition to `SUCCESS` or `FAILED`. Recurring booking series are modeled by `BookingSeries`; each successfully allocated occurrence has an independent `BOOKING_PAYMENT`. The initial full-refund behavior is implemented by the replaceable `CancellationRefundPolicy`.
 
 ## `SystemEvent`
 

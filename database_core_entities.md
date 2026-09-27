@@ -14,8 +14,8 @@ Booking lifecycle ──> SystemEvent audit snapshots
 - **Customer:** Generated UUID, name, and address. Customers with booking history cannot be deleted.
 - **Helper:** Name, unique phone, gender (`FEMALE`, `MALE`, or `OTHER`), localities (maximum three), skills, hourly rate, cumulative rating total and count (average calculated on read), and AES-GCM encrypted government ID proof.
 - **HelperAvailability:** Helper, date, start/end time, status (`AVAILABLE` or `BOOKED`), and optimistic-locking version.
-- **BookingSeries:** Customer, weekly start date and time, requested occurrence count, lifecycle status, and optimistic-locking version.
-- **Booking:** Required customer relationship, optional booking-series relationship, assigned helper ID, service locality and skill, date/time, amount, lifecycle status (`PENDING_PAYMENT`, `CONFIRMED`, `CANCELLED`, or `RESCHEDULED`), and optimistic-locking version.
+- **BookingSeries:** Customer, start date and time, selected recurring weekdays, requested occurrence count, lifecycle status, and optimistic-locking version.
+- **Booking:** Required customer relationship, optional booking-series relationship, assigned helper ID, service locality and skill, date/time, booking type (`INSTANT`, `SCHEDULED`, or `RECURRING`), amount, lifecycle status (`PENDING_PAYMENT`, `CONFIRMED`, `CANCELLED`, or `RESCHEDULED`), and optimistic-locking version.
 - **Payment:** Optional booking and booking-series IDs, type (`BOOKING_PAYMENT`, `RESCHEDULE_PAYMENT`, `CANCEL_REFUND`, or `RESCHEDULE_REFUND`), optional related source-payment ID, amount, payment method (`CARD`, `UPI`, or `WALLET`), provider reference, and status. Cancellations create at most one consolidated pending refund record per cancellation operation; original charge records are preserved. Method-specific processors currently generate mock references and do not connect to external providers.
 - **SystemEvent:** Event type, aggregate identity, nullable helper/customer/payment/booking/series identifiers, JSON payload snapshot, and creation timestamp. Booking lifecycle, series lifecycle, and helper availability updates are audited.
 

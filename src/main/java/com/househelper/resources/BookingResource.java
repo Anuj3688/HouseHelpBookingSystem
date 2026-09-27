@@ -2,6 +2,7 @@ package com.househelper.resources;
 
 import com.househelper.dto.BookingRequest;
 import com.househelper.dto.BookingResponse;
+import com.househelper.dto.InstantBookingRequest;
 import com.househelper.dto.RescheduleRequest;
 import com.househelper.service.BookingService;
 import jakarta.validation.Valid;
@@ -28,6 +29,12 @@ public class BookingResource {
     @Operation(summary = "Create a booking", description = "Allocates the lowest-priced available helper for an existing customer.")
     public BookingResponse createBooking(@Valid @RequestBody BookingRequest request) {
         return bookingService.createBooking(request);
+    }
+
+    @PostMapping("/instant")
+    @Operation(summary = "Create an instant booking", description = "Books the earliest matching available slot starting now or later today.")
+    public BookingResponse createInstantBooking(@Valid @RequestBody InstantBookingRequest request) {
+        return bookingService.createInstantBooking(request);
     }
 
     @PutMapping("/{bookingId}/reschedule")

@@ -1,6 +1,7 @@
 package com.househelper.dto;
 
 import com.househelper.model.BookingStatus;
+import com.househelper.model.BookingType;
 import com.househelper.model.SkillType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -29,4 +30,5 @@ public class BookingResponse {
     private LocalTime endTime;
     private Double totalAmount;
     private BookingStatus status;
+    private BookingType bookingType;
 }

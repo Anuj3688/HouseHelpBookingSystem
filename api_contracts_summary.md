@@ -121,7 +121,7 @@ The available-helper and available-slot endpoints do not filter by date, localit
 
 ## Bookings
 
-### Create a booking
+### Create a scheduled booking
 
 `POST /api/bookings`
 
@@ -137,7 +137,22 @@ The available-helper and available-slot endpoints do not filter by date, localit
 }
 ```
 
-The customer ID must refer to an existing customer. The system selects an available helper for the exact date and time, ordered by lowest hourly rate and then highest rating. The slot is protected with optimistic locking and the booking operation retries up to three times on optimistic-lock conflicts. `paymentMethod` accepts `CARD`, `UPI`, or `WALLET`. The selected method-specific processor creates a pending payment record with a mock provider reference. The booking remains `PENDING_PAYMENT` until the payment succeeds; payment failure cancels the booking and releases its slot. The response includes the booking's `paymentId`.
+The customer ID must refer to an existing customer, and the requested start date/time must be in the future. The system selects an available helper for the exact date and time, ordered by lowest hourly rate and then highest rating. The slot is protected with optimistic locking and the booking operation retries up to three times on optimistic-lock conflicts. `paymentMethod` accepts `CARD`, `UPI`, or `WALLET`. The selected method-specific processor creates a pending payment record with a mock provider reference. The booking remains `PENDING_PAYMENT` until the payment succeeds; payment failure cancels the booking and releases its slot. The response includes the booking's `paymentId`.
+
+### Create an instant booking
+
+`POST /api/bookings/instant`
+
+```json
+{
+  "customerId": "550e8400-e29b-41d4-a716-446655440001",
+  "locality": "Koramangala",
+  "skill": "CLEANING",
+  "paymentMethod": "CARD"
+}
+```
+
+The system finds the earliest matching available one-hour slot starting in the current hour (if the current time is exactly on the hour) or a later hour today. It retries with the next available time today if a candidate slot is concurrently taken. If no matching slot remains today, it returns `409 Conflict`; it does not silently book a later date. The selected slot follows the same transactional booking and pending-payment flow as scheduled bookings.
 
 ### Reschedule or cancel a booking
 
@@ -148,9 +163,9 @@ The customer ID must refer to an existing customer. The system selects an availa
 
 When rescheduling, a positive price difference creates a `RESCHEDULE_PAYMENT`; a negative difference creates a pending `RESCHEDULE_REFUND`. These records do not move money because no external payment gateway is integrated.
 
-### Create and cancel a weekly booking series
+### Create and cancel a recurring booking series
 
-`POST /api/booking-series` creates a weekly series for a required number of occurrences (1–52). Every requested date uses the same weekday and time. Available occurrences are booked independently; dates without an available helper are returned in `unavailableDates` without discarding successful bookings. Each created occurrence receives its own `BOOKING_PAYMENT`, using the selected method, and each returned booking includes its own `paymentId`; payment success or failure is handled independently per occurrence.
+`POST /api/booking-series` creates a recurring series for a required number of occurrences (1–52). Set `recurrenceDays` to any combination of `MONDAY` through `SUNDAY`; if omitted or empty, the series repeats on the weekday of `startDate`. Each occurrence uses the same service and time. Available occurrences are booked independently; dates without an available helper are returned in `unavailableDates` without discarding successful bookings. Each created occurrence receives its own `BOOKING_PAYMENT`, using the selected method, and each returned booking includes its own `paymentId`; payment success or failure is handled independently per occurrence.
 
 ```json
 {
@@ -161,11 +176,12 @@ When rescheduling, a positive price difference creates a `RESCHEDULE_PAYMENT`; a
   "startTime": "09:00:00",
   "endTime": "10:00:00",
   "paymentMethod": "CARD",
-  "occurrenceCount": 4
+  "occurrenceCount": 4,
+  "recurrenceDays": ["MONDAY", "WEDNESDAY", "FRIDAY"]
 }
 ```
 
-The response contains `seriesId`, the created booking responses (each has that `seriesId` and its payment ID), and unavailable dates. To cancel only one occurrence, use `POST /api/bookings/{bookingId}/cancel`. To cancel the entire series, use `POST /api/booking-series/{seriesId}/cancel`; all active occurrence slots are released and one pending refund is created for the remaining successful charges across those occurrences. The initial `FullRefundCancellationPolicy` is replaceable through the `CancellationRefundPolicy` interface.
+The response contains `seriesId`, the effective `recurrenceDays`, the created booking responses (each has that `seriesId`, a `RECURRING` booking type, and its payment ID), and unavailable dates. To cancel only one occurrence, use `POST /api/bookings/{bookingId}/cancel`. To cancel the entire series, use `POST /api/booking-series/{seriesId}/cancel`; all active occurrence slots are released and one pending refund is created for the remaining successful charges across those occurrences. The initial `FullRefundCancellationPolicy` is replaceable through the `CancellationRefundPolicy` interface. Each booking response identifies its type as `INSTANT`, `SCHEDULED`, or `RECURRING`.
 
 ## Mock payments
 

@@ -29,14 +29,16 @@ For production, configure `HOUSEHELPER_ENCRYPTION_KEY` with a securely managed, 
 - **Optimistic locking and transactional booking operations:** Availability and booking-series records use JPA `@Version`; booking allocation, rescheduling, cancellation, and slot release are coordinated transactionally to protect state changes from concurrent updates.
 - **UUID identifiers:** Entity IDs and related API identifiers use UUIDs, avoiding predictable sequential IDs.
 - **Audit trail and application logs:** Lifecycle changes are recorded as `SystemEvent` snapshots in the database and can be inspected through `GET /api/housekeeping/events`. Application diagnostics use SLF4J; SQL logging is enabled for local development and should be reviewed/disabled appropriately for production.
-- **Recurring bookings and payments:** A weekly series creates each available occurrence independently; every occurrence has its own booking and payment. A whole-series cancellation releases active occurrence slots and requests one consolidated refund record.
+- **Common booking type model:** Instant, scheduled, and recurring bookings share one `Booking` model and response shape, distinguished by `BookingType`. Instant booking selects the earliest matching slot starting now or later today; scheduled booking uses the requested date/time; recurring booking expands a selected weekday pattern into individual occurrences.
 
 ## Assumptions and current behavior
 
 - Availability is entered as fixed one-hour slots starting on the hour. Overlapping availability is not accepted.
+- Instant booking uses the server's configured local timezone and selects the earliest matching slot whose start is the current hour (when exactly on the hour) or a later hour today. If no suitable slot remains today, the request fails rather than booking a later date.
+- Scheduled and recurring bookings must start in the future according to the server's configured local timezone.
 - A booking reserves its slot and remains `PENDING_PAYMENT` until its simulated payment succeeds. A successful payment confirms it; a failed payment cancels the booking and releases the slot.
 - Payment outcomes are set through the mock payment-status endpoint. Refund records are local pending requests; no real charge or refund is submitted to an external provider.
-- Weekly series accept a requested occurrence count. Available occurrences are created while unavailable dates are reported individually.
+- Recurring series accept up to 52 occurrences and an optional set of weekdays. If weekdays are omitted, the series repeats on the start date's weekday. Available occurrences are created while unavailable dates are reported individually; every occurrence has its own payment record.
 - A cancellation releases the relevant slot(s) and applies the configured refund policy. Single-occurrence cancellation and whole-series cancellation are separate operations.
 - If rescheduling cannot find an available helper for the requested time, the request fails with `409 Conflict` and the existing booking remains unchanged.
 

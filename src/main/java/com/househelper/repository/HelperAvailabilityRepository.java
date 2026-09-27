@@ -53,4 +53,26 @@ public interface HelperAvailabilityRepository extends JpaRepository<HelperAvaila
             @Param("startTime") LocalTime startTime,
             @Param("endTime") LocalTime endTime,
             @Param("status") AvailabilityStatus status);
+
+    @Query("""
+            select availability
+            from HelperAvailability availability
+            join fetch availability.helper helper
+            join helper.localities locality
+            join helper.skills skill
+            where lower(locality) = lower(:locality)
+              and skill = :skill
+              and availability.slotDate = :slotDate
+              and availability.startTime >= :earliestStartTime
+              and availability.status = :status
+            order by availability.startTime asc, helper.hourlyRate asc,
+                     case when helper.ratingCount > 0
+                          then helper.totalRating / helper.ratingCount else 0 end desc
+            """)
+    List<HelperAvailability> findAvailableSlotsFrom(
+            @Param("locality") String locality,
+            @Param("skill") SkillType skill,
+            @Param("slotDate") LocalDate slotDate,
+            @Param("earliestStartTime") LocalTime earliestStartTime,
+            @Param("status") AvailabilityStatus status);
 }

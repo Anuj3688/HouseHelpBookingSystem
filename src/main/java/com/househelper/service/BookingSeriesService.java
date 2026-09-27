@@ -26,11 +26,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.DayOfWeek;
+import java.time.Clock;
+import java.util.EnumSet;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -44,27 +49,36 @@ public class BookingSeriesService {
     private final BookingService bookingService;
     private final PaymentRecordService paymentRecordService;
     private final EventPublisherService eventPublisherService;
+    private final Clock clock;
 
     public BookingSeriesResponse createWeeklySeries(BookingSeriesRequest request) {
         if (!request.getEndTime().isAfter(request.getStartTime())) {
             throw new InvalidRequestException("End time must be later than start time.");
         }
+        if (!LocalDateTime.of(request.getStartDate(), request.getStartTime())
+                .isAfter(LocalDateTime.now(clock))) {
+            throw new InvalidRequestException("Recurring bookings must start in the future.");
+        }
         Customer customer = customerRepository.findById(request.getCustomerId())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Customer " + request.getCustomerId() + " was not found."));
+        Set<DayOfWeek> recurrenceDays = request.getRecurrenceDays() == null
+                || request.getRecurrenceDays().isEmpty()
+                ? Set.of(request.getStartDate().getDayOfWeek())
+                : EnumSet.copyOf(request.getRecurrenceDays());
         BookingSeries series = bookingSeriesRepository.save(BookingSeries.builder()
                 .customer(customer)
                 .startDate(request.getStartDate())
                 .startTime(request.getStartTime())
                 .endTime(request.getEndTime())
                 .occurrenceCount(request.getOccurrenceCount())
+                .recurrenceDays(recurrenceDays)
                 .status(BookingSeriesStatus.ACTIVE)
                 .build());
 
         List<BookingResponse> createdBookings = new ArrayList<>();
         List<LocalDate> unavailableDates = new ArrayList<>();
-        for (int occurrence = 0; occurrence < request.getOccurrenceCount(); occurrence++) {
-            LocalDate date = request.getStartDate().plusWeeks(occurrence);
+        for (LocalDate date : occurrenceDates(request.getStartDate(), recurrenceDays, request.getOccurrenceCount())) {
             try {
                 createdBookings.add(bookingService.createRecurringBookingOccurrence(series,
                         toBookingRequest(request, date)));
@@ -76,6 +90,7 @@ public class BookingSeriesService {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("seriesId", series.getId());
         payload.put("requestedOccurrences", request.getOccurrenceCount());
+        payload.put("recurrenceDays", recurrenceDays);
         payload.put("createdBookingIds", createdBookings.stream().map(BookingResponse::getId).toList());
         payload.put("unavailableDates", unavailableDates);
         eventPublisherService.publishEvent("BOOKING_SERIES_CREATED", "BookingSeries",
@@ -86,6 +101,7 @@ public class BookingSeriesService {
                 .requestedOccurrences(request.getOccurrenceCount())
                 .createdBookings(createdBookings)
                 .unavailableDates(unavailableDates)
+                .recurrenceDays(recurrenceDays)
                 .build();
     }
 
@@ -140,5 +156,20 @@ public class BookingSeriesService {
         request.setEndTime(seriesRequest.getEndTime());
         request.setPaymentMethod(seriesRequest.getPaymentMethod());
         return request;
+    }
+
+    private List<LocalDate> occurrenceDates(LocalDate startDate, Set<DayOfWeek> recurrenceDays,
+                                            int occurrenceCount) {
+        List<LocalDate> dates = new ArrayList<>(occurrenceCount);
+        for (int daysFromStart = 0; dates.size() < occurrenceCount && daysFromStart <= 364; daysFromStart++) {
+            LocalDate date = startDate.plusDays(daysFromStart);
+            if (recurrenceDays.contains(date.getDayOfWeek())) {
+                dates.add(date);
+            }
+        }
+        if (dates.size() != occurrenceCount) {
+            throw new InvalidRequestException("The recurrence pattern does not produce enough dates within one year.");
+        }
+        return dates;
     }
 }

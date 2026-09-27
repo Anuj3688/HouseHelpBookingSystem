@@ -6,18 +6,18 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Positive;
 import lombok.Data;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.DayOfWeek;
+import java.util.Set;
 import java.util.UUID;
 
 @Data
 public class BookingSeriesRequest {
 
     @NotNull
-    @Positive
     private UUID customerId;
 
     @NotBlank
@@ -42,4 +42,6 @@ public class BookingSeriesRequest {
     @Min(1)
     @Max(52)
     private Integer occurrenceCount;
+
+    private Set<DayOfWeek> recurrenceDays;
 }

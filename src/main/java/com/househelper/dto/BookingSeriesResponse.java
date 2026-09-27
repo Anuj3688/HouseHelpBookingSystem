@@ -4,7 +4,9 @@ import lombok.Builder;
 import lombok.Value;
 
 import java.time.LocalDate;
+import java.time.DayOfWeek;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Value
@@ -15,4 +17,5 @@ public class BookingSeriesResponse {
     int requestedOccurrences;
     List<BookingResponse> createdBookings;
     List<LocalDate> unavailableDates;
+    Set<DayOfWeek> recurrenceDays;
 }

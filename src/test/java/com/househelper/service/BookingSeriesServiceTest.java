@@ -25,12 +25,16 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.DayOfWeek;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -79,8 +83,45 @@ class BookingSeriesServiceTest {
     @Mock
     private EventPublisherService eventPublisherService;
 
-    @InjectMocks
     private BookingSeriesService bookingSeriesService;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setUp() {
+        bookingSeriesService = new BookingSeriesService(bookingSeriesRepository, bookingRepository,
+                customerRepository, availabilityRepository, bookingService, paymentRecordService,
+                eventPublisherService, Clock.fixed(Instant.parse("2026-09-27T08:00:00Z"), ZoneOffset.UTC));
+    }
+
+    @Test
+    @DisplayName("Creates recurring occurrences on each selected weekday")
+    void createWeekdaySeries() {
+        Customer customer = customer();
+        BookingSeries series = series(customer, BookingSeriesStatus.ACTIVE);
+        BookingSeriesRequest request = request(5, START_TIME, END_TIME);
+        request.setRecurrenceDays(EnumSet.of(
+                DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY,
+                DayOfWeek.THURSDAY, DayOfWeek.FRIDAY));
+        when(customerRepository.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer));
+        when(bookingSeriesRepository.save(any(BookingSeries.class))).thenReturn(series);
+        when(bookingService.createRecurringBookingOccurrence(eq(series), any(BookingRequest.class)))
+                .thenAnswer(invocation -> {
+                    BookingRequest occurrence = invocation.getArgument(1);
+                    return BookingResponse.builder()
+                            .id(uuid(occurrence.getBookingDate().getDayOfMonth()))
+                            .seriesId(SERIES_ID)
+                            .bookingDate(occurrence.getBookingDate())
+                            .build();
+                });
+
+        BookingSeriesResponse response = bookingSeriesService.createWeeklySeries(request);
+
+        assertEquals(List.of(
+                LocalDate.of(2026, 10, 5), LocalDate.of(2026, 10, 6),
+                LocalDate.of(2026, 10, 7), LocalDate.of(2026, 10, 8),
+                LocalDate.of(2026, 10, 9)),
+                response.getCreatedBookings().stream().map(BookingResponse::getBookingDate).toList());
+        assertEquals(request.getRecurrenceDays(), response.getRecurrenceDays());
+    }
 
     @Test
     @DisplayName("Creates available weekly occurrences and returns unavailable dates without rejecting the series")
@@ -126,6 +167,18 @@ class BookingSeriesServiceTest {
     void createSeriesInvalidPeriod() {
         assertThrows(InvalidRequestException.class, () -> bookingSeriesService.createWeeklySeries(
                 request(2, START_TIME, START_TIME)));
+
+        verifyNoInteractions(customerRepository, bookingSeriesRepository, bookingService, eventPublisherService);
+    }
+
+    @Test
+    @DisplayName("Rejects a recurring series that starts in the past before persisting it")
+    void createPastSeries() {
+        BookingSeriesRequest request = request(2, START_TIME, END_TIME);
+        request.setStartDate(LocalDate.of(2026, 9, 27));
+        request.setStartTime(LocalTime.of(7, 0));
+
+        assertThrows(InvalidRequestException.class, () -> bookingSeriesService.createWeeklySeries(request));
 
         verifyNoInteractions(customerRepository, bookingSeriesRepository, bookingService, eventPublisherService);
     }

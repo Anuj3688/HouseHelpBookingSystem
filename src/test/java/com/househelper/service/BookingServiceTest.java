@@ -2,6 +2,7 @@ package com.househelper.service;
 
 import com.househelper.dto.BookingRequest;
 import com.househelper.dto.BookingResponse;
+import com.househelper.dto.InstantBookingRequest;
 import com.househelper.dto.RescheduleRequest;
 import com.househelper.exception.ConflictException;
 import com.househelper.exception.InvalidRequestException;
@@ -11,6 +12,7 @@ import com.househelper.model.AvailabilityStatus;
 import com.househelper.model.Booking;
 import com.househelper.model.BookingSeries;
 import com.househelper.model.BookingStatus;
+import com.househelper.model.BookingType;
 import com.househelper.model.Customer;
 import com.househelper.model.Helper;
 import com.househelper.model.HelperAvailability;
@@ -35,6 +37,9 @@ import org.springframework.transaction.support.SimpleTransactionStatus;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -62,6 +67,7 @@ class BookingServiceTest {
     private static final UUID HELPER_ID = uuid(22);
     private static final UUID BOOKING_ID = uuid(33);
     private static final LocalDate BOOKING_DATE = LocalDate.of(2026, 10, 5);
+    private static final LocalDate INSTANT_BOOKING_DATE = LocalDate.of(2026, 10, 4);
     private static final LocalTime START_TIME = LocalTime.of(9, 0);
     private static final LocalTime END_TIME = LocalTime.of(10, 0);
 
@@ -90,7 +96,52 @@ class BookingServiceTest {
         lenient().when(transactionManager.getTransaction(any(TransactionDefinition.class)))
                 .thenAnswer(invocation -> new SimpleTransactionStatus());
         bookingService = new BookingService(bookingRepository, customerRepository, availabilityRepository,
-                paymentRecordService, eventPublisherService, transactionManager);
+                paymentRecordService, eventPublisherService, transactionManager,
+                Clock.fixed(Instant.parse("2026-10-04T09:30:00Z"), ZoneOffset.UTC));
+    }
+
+    @Test
+    @DisplayName("Books the earliest available slot starting later today for an instant request")
+    void createInstantBooking() {
+        Customer customer = customer();
+        Helper helper = helper(350.0);
+        HelperAvailability tenOClock = slot(uuid(52), helper, INSTANT_BOOKING_DATE,
+                LocalTime.of(10, 0), LocalTime.of(11, 0));
+        HelperAvailability elevenOClock = slot(uuid(53), helper, INSTANT_BOOKING_DATE,
+                LocalTime.of(11, 0), LocalTime.of(12, 0));
+        when(availabilityRepository.findAvailableSlotsFrom(
+                "Central", SkillType.CLEANING, INSTANT_BOOKING_DATE,
+                LocalTime.of(10, 0), AvailabilityStatus.AVAILABLE))
+                .thenReturn(List.of(tenOClock, elevenOClock));
+        when(customerRepository.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer));
+        when(availabilityRepository.findAvailableHelpersForSlot(
+                "Central", SkillType.CLEANING, INSTANT_BOOKING_DATE,
+                LocalTime.of(10, 0), LocalTime.of(11, 0),
+                AvailabilityStatus.AVAILABLE)).thenReturn(List.of());
+        when(availabilityRepository.findAvailableHelpersForSlot(
+                "Central", SkillType.CLEANING, INSTANT_BOOKING_DATE,
+                LocalTime.of(11, 0), LocalTime.of(12, 0),
+                AvailabilityStatus.AVAILABLE)).thenReturn(List.of(elevenOClock));
+        when(availabilityRepository.findById(uuid(53))).thenReturn(Optional.of(elevenOClock));
+        when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> {
+            Booking saved = invocation.getArgument(0);
+            saved.setId(BOOKING_ID);
+            return saved;
+        });
+        when(paymentRecordService.createBookingPayment(
+                eq(BOOKING_ID), isNull(), any(BigDecimal.class), eq(PaymentMethod.CARD)))
+                .thenReturn(payment(uuid(71), BOOKING_ID, null, PaymentType.BOOKING_PAYMENT));
+        InstantBookingRequest request = new InstantBookingRequest();
+        request.setCustomerId(CUSTOMER_ID);
+        request.setLocality("Central");
+        request.setSkill(SkillType.CLEANING);
+        request.setPaymentMethod(PaymentMethod.CARD);
+
+        BookingResponse response = bookingService.createInstantBooking(request);
+
+        assertEquals(LocalTime.of(11, 0), response.getStartTime());
+        assertEquals(BookingType.INSTANT, response.getBookingType());
+        assertEquals(AvailabilityStatus.BOOKED, elevenOClock.getStatus());
     }
 
     @Test
@@ -121,6 +172,7 @@ class BookingServiceTest {
         assertEquals(HELPER_ID, response.getAssignedHelperId());
         assertEquals(350.0, response.getTotalAmount());
         assertEquals(BookingStatus.PENDING_PAYMENT, response.getStatus());
+        assertEquals(BookingType.SCHEDULED, response.getBookingType());
         assertEquals(uuid(71), response.getPaymentId());
         assertEquals(AvailabilityStatus.BOOKED, slot.getStatus());
         verify(paymentRecordService).createBookingPayment(
@@ -131,6 +183,18 @@ class BookingServiceTest {
                 eq("BOOKING_CREATED"), eq("Booking"), eq(BOOKING_ID.toString()),
                 eq(HELPER_ID), eq(CUSTOMER_ID), eq(uuid(71)), eq(BOOKING_ID),
                 isNull(), any(BookingResponse.class));
+    }
+
+    @Test
+    @DisplayName("Rejects a scheduled booking whose start time has already passed")
+    void createPastScheduledBooking() {
+        BookingRequest request = request(PaymentMethod.CARD);
+        request.setBookingDate(INSTANT_BOOKING_DATE);
+
+        assertThrows(com.househelper.exception.InvalidRequestException.class,
+                () -> bookingService.createBooking(request));
+
+        verifyNoInteractions(customerRepository, availabilityRepository, paymentRecordService);
     }
 
     @Test
@@ -158,6 +222,7 @@ class BookingServiceTest {
         BookingResponse response = bookingService.createRecurringBookingOccurrence(series, request(PaymentMethod.CARD));
 
         assertEquals(uuid(88), response.getSeriesId());
+        assertEquals(BookingType.RECURRING, response.getBookingType());
         assertEquals(uuid(71), response.getPaymentId());
         assertEquals(BookingStatus.PENDING_PAYMENT, response.getStatus());
         verify(paymentRecordService).createBookingPayment(

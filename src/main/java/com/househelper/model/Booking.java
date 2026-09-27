@@ -86,6 +86,11 @@ public class Booking {
     @Column(nullable = false)
     private BookingStatus status;
 
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @Column(name = "booking_type", nullable = false)
+    private BookingType bookingType;
+
     @Version
     private Long version;
 }
