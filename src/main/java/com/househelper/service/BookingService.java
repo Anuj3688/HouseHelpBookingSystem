@@ -87,10 +87,13 @@ public class BookingService {
         return createBooking(request, BookingType.SCHEDULED);
     }
 
+    /*
+    * Here currently we are just focusing on next possible slot instant booking.
+    * Travel time for househelp is not considered here.
+    *
+    * */
     public BookingResponse createInstantBooking(InstantBookingRequest request) {
-        customerRepository.findById(request.getCustomerId())
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Customer " + request.getCustomerId() + " was not found."));
+        requireCustomer(request.getCustomerId());
         LocalDate today = LocalDate.now(clock);
         LocalTime now = LocalTime.now(clock);
         LocalTime earliestStart = now.truncatedTo(ChronoUnit.HOURS);
@@ -208,9 +211,7 @@ public class BookingService {
 
     private BookingResponse createBookingInTransaction(BookingRequest request, BookingSeries series,
                                                        BookingType bookingType) {
-        Customer customer = customerRepository.findById(request.getCustomerId())
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Customer " + request.getCustomerId() + " was not found."));
+        Customer customer = requireCustomer(request.getCustomerId());
 
         HelperAvailability slot = findAvailableSlot(
                 request.getLocality().trim(), request.getSkill(), request.getBookingDate(),
@@ -269,6 +270,11 @@ public class BookingService {
     private Booking requireBooking(UUID bookingId) {
         return bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new ResourceNotFoundException("Booking " + bookingId + " was not found."));
+    }
+
+    private Customer requireCustomer(UUID customerId) {
+        return customerRepository.findById(customerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Customer " + customerId + " was not found."));
     }
 
     private void validateCanReschedule(Booking booking, RescheduleRequest request) {

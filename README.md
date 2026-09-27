@@ -2,6 +2,14 @@
 
 A Java 21 / Spring Boot REST API for discovering house-help availability and managing one-off and recurring bookings, payments, cancellations, and refunds.
 
+##  Questions in mind while building?
+1. Can a user book a maid with this app?
+2. Can a user cancel a booking?
+3. Can a user make payment via multiple payment methods?
+4. Can a user reschedule a booking?
+5. Can we track what happened in the system? (Audit trail)
+6. Can we clearly see when the user made a request and which helper was assigned?
+
 ## Build and run
 
 **Prerequisites:** Java 21 and Maven 3.8+.
@@ -30,6 +38,7 @@ For production, configure `HOUSEHELPER_ENCRYPTION_KEY` with a securely managed, 
 - **UUID identifiers:** Entity IDs and related API identifiers use UUIDs, avoiding predictable sequential IDs.
 - **Audit trail and application logs:** Lifecycle changes are recorded as `SystemEvent` snapshots in the database and can be inspected through `GET /api/housekeeping/events`. Application diagnostics use SLF4J; SQL logging is enabled for local development and should be reviewed/disabled appropriately for production.
 - **Common booking type model:** Instant, scheduled, and recurring bookings share one `Booking` model and response shape, distinguished by `BookingType`. Instant booking selects the earliest matching slot starting now or later today; scheduled booking uses the requested date/time; recurring booking expands a selected weekday pattern into individual occurrences.
+- **Domain Specific Logic:** Business rules and domain logic are encapsulated within dedicated service classes, ensuring separation of concerns and maintainability.
 
 ## Query decisions, optimization & future query enhancements
 
@@ -90,3 +99,17 @@ See [api_contracts_summary.md](api_contracts_summary.md) for routes, payloads, a
 7. Add reconciliation to detect mismatches between terminal payment status, booking status, and slot status, then safely retry or surface them for intervention.
 8. Add helper-initiated unavailability management for future periods. Find affected upcoming bookings, reassign each to another suitable and available helper where possible, and otherwise cancel it, release the original slot, apply the refund policy, and send the customer a clear apology and update.
 9. Add an optional customer-specific wallet as an alternative to provider refunds. Credit eligible refundable amounts and allow them to be applied to future bookings, with auditable wallet transactions, concurrency-safe balances, and a clear customer choice between wallet credit and a refund to the original payment method.
+10. In future we can fully handle the system through wallet. Before booking we will just ask the user to add in wallet and then go with booking. Doing booking while adding money creates multiple bottelnecks and is not a good user experience. So we can have a wallet system where user can add money and then do booking. This will also help us in future to give cashback and other offers to the users.
+
+## Questions to be answered in future?
+1 . Can we authenticate if the user address is correct and validate the user profile?
+2 - Can we give the Househelp an option to cancel all the future bookings?
+3-  Can we give househelp prizing recommendation based on the market rate and their skillset?
+4 - Can we give the user an option to add money in wallet and then do booking instead of doing booking and then adding money?
+5- Can we give the user an option to extend more booking time?
+6 - Currenlty booking is handled per hour basis can we make it configurable as per the type of work?
+7 - Can we give the user an option to give feedback and rating to the househelp after the booking is completed?
+8 - Can we add proper tracking of when househelp reached the customer and when the work was completed?
+9 - Can we add Househelp feedback feature as well to handle househelp safety and security concerns?
+10 - Should we give customer an option to actually choose the exact hosehelp for booking?
+11- Need to add a full communication system so that user receives all necessary notifications and alerts regarding the booking, payment, and cancellation.

@@ -1514,6 +1514,116 @@
       "id": "c127de2a-1ea8-4d53-afde-745a7d2aaf51",
       "name": "Tanvi Malhotra",
       "address": "Flat 123, Block F, Hebbal, Bangalore"
+    },
+    {
+      "id": "b23b525c-8afb-48d1-8fe1-e80b51f768b7",
+      "name": "Karan Rao",
+      "address": "Flat 124, Block A, Jayanagar, Bangalore"
+    },
+    {
+      "id": "131588b9-45c6-4fb6-a133-5968f2a71558",
+      "name": "Esha Verma",
+      "address": "Flat 125, Block B, Koramangala, Bangalore"
+    },
+    {
+      "id": "6769ed01-b9eb-468f-b772-abb1e82cd11c",
+      "name": "Utkarsh Mehta",
+      "address": "Flat 126, Block C, BTM_Layout, Bangalore"
+    },
+    {
+      "id": "f89d3559-afc3-42e2-8c6b-196df52b51d4",
+      "name": "Chetan Rao",
+      "address": "Flat 127, Block D, HSR_Layout, Bangalore"
+    },
+    {
+      "id": "9b84c5fa-ab08-4a9c-9017-fb0d51faa6e0",
+      "name": "Bhavna Malhotra",
+      "address": "Flat 128, Block E, Electronic_City, Bangalore"
+    },
+    {
+      "id": "1ffc3bf0-bbba-4bb5-9b17-2e7bd951c999",
+      "name": "Harini Mehta",
+      "address": "Flat 130, Block A, Whitefield, Bangalore"
+    },
+    {
+      "id": "748e8991-f0f7-4912-b37b-150a5c89da96",
+      "name": "Deepika Patel",
+      "address": "Flat 129, Block F, HSR_Layout, Bangalore"
+    },
+    {
+      "id": "a9818de4-6eea-407e-a906-25f12a8275e4",
+      "name": "Zoya Sharma",
+      "address": "Flat 131, Block B, Hebbal, Bangalore"
+    },
+    {
+      "id": "6171d63f-7aee-47f6-8031-9b429f8fba29",
+      "name": "Yash Joshi",
+      "address": "Flat 132, Block C, BTM_Layout, Bangalore"
+    },
+    {
+      "id": "de65f4a4-1bf4-4486-86d6-a274f61cfed0",
+      "name": "Ekta Kulkarni",
+      "address": "Flat 134, Block E, Hebbal, Bangalore"
+    },
+    {
+      "id": "a7615170-668a-46e0-9100-875205cf663e",
+      "name": "Gautam Iyer",
+      "address": "Flat 133, Block D, Hebbal, Bangalore"
+    },
+    {
+      "id": "346a3f2f-8faa-41db-ad86-ade1cde52984",
+      "name": "Ekta Kulkarni",
+      "address": "Flat 134, Block E, Hebbal, Bangalore"
+    },
+    {
+      "id": "d10338cd-f2d6-46e2-9987-404439d11763",
+      "name": "Chirag Joshi",
+      "address": "Flat 135, Block F, Whitefield, Bangalore"
+    },
+    {
+      "id": "d79759c2-24ee-463c-b4c1-03ffd6f890c6",
+      "name": "Chirag Joshi",
+      "address": "Flat 135, Block F, Whitefield, Bangalore"
+    },
+    {
+      "id": "4d61eced-1217-4880-b735-a7f44903de69",
+      "name": "Bhumika Nair",
+      "address": "Flat 136, Block A, Jayanagar, Bangalore"
+    },
+    {
+      "id": "fa113f0b-95ec-42ad-b880-069b0173aa08",
+      "name": "Aarav Verma",
+      "address": "Flat 137, Block B, BTM_Layout, Bangalore"
+    },
+    {
+      "id": "259cc178-6f79-4bdc-a2d8-44465fb1771a",
+      "name": "Manish Sharma",
+      "address": "Flat 138, Block C, Indiranagar, Bangalore"
+    },
+    {
+      "id": "76f63d68-f605-49fe-8c5f-0f6a27b776ba",
+      "name": "Harini Joshi",
+      "address": "Flat 139, Block D, BTM_Layout, Bangalore"
+    },
+    {
+      "id": "62c9ced0-f930-47f0-9ce1-272980f6e5b6",
+      "name": "Ganesh Pillai",
+      "address": "Flat 140, Block E, HSR_Layout, Bangalore"
+    },
+    {
+      "id": "14115c99-1e79-4300-8270-9a12de2b9c32",
+      "name": "Sanya Joshi",
+      "address": "Flat 144, Block C, Electronic_City, Bangalore"
+    },
+    {
+      "id": "32d034d4-c9b8-492d-95e3-3bb63a25f1ff",
+      "name": "Deepika Malhotra",
+      "address": "Flat 142, Block A, BTM_Layout, Bangalore"
+    },
+    {
+      "id": "ca5ff690-9865-4cff-8168-f0a65767c26a",
+      "name": "Sanya Joshi",
+      "address": "Flat 144, Block C, Electronic_City, Bangalore"
     }
   ],
   "helpers": [
@@ -5803,6 +5913,119 @@
         "CLEANING"
       ],
       "hourlyRate": 450.0,
+      "rating": 0.0,
+      "ratingCount": 0
+    },
+    {
+      "id": "2b9b275d-993f-48db-84f8-92b717f192f3",
+      "name": "Pramod Shinde_252",
+      "gender": "FEMALE",
+      "localities": [
+        "BTM_Layout",
+        "Indiranagar",
+        "Electronic_City"
+      ],
+      "skills": [
+        "LAUNDRY",
+        "DISH_WASHING"
+      ],
+      "hourlyRate": 480.0,
+      "rating": 0.0,
+      "ratingCount": 0
+    },
+    {
+      "id": "1d6be0af-0ed7-487e-b2f1-ac3ef0a9cefa",
+      "name": "Suresh Kumar_253",
+      "gender": "FEMALE",
+      "localities": [
+        "Whitefield"
+      ],
+      "skills": [
+        "DISH_WASHING"
+      ],
+      "hourlyRate": 450.0,
+      "rating": 0.0,
+      "ratingCount": 0
+    },
+    {
+      "id": "462c74ab-7a8d-4f52-9cf5-da43f4a0cb5c",
+      "name": "Manoj Patil_257",
+      "gender": "MALE",
+      "localities": [
+        "Koramangala",
+        "Whitefield"
+      ],
+      "skills": [
+        "CLEANING",
+        "DISH_WASHING"
+      ],
+      "hourlyRate": 390.0,
+      "rating": 0.0,
+      "ratingCount": 0
+    },
+    {
+      "id": "e769371e-567f-4fcb-bef3-a9c5fbb86b93",
+      "name": "Amit Gowda_259",
+      "gender": "OTHER",
+      "localities": [
+        "Koramangala"
+      ],
+      "skills": [
+        "CLEANING",
+        "CHILD_CARE"
+      ],
+      "hourlyRate": 310.0,
+      "rating": 0.0,
+      "ratingCount": 0
+    },
+    {
+      "id": "d21aeaab-fb93-460a-8a51-c83126249011",
+      "name": "Sanjay Swamy_260",
+      "gender": "OTHER",
+      "localities": [
+        "Indiranagar",
+        "Koramangala",
+        "HSR_Layout"
+      ],
+      "skills": [
+        "ELDER_CARE",
+        "COOKING",
+        "CLEANING"
+      ],
+      "hourlyRate": 230.0,
+      "rating": 0.0,
+      "ratingCount": 0
+    },
+    {
+      "id": "c3c28e9e-d6fc-4a11-9826-710a574b61f9",
+      "name": "Rekha Ram_256",
+      "gender": "FEMALE",
+      "localities": [
+        "Indiranagar",
+        "Electronic_City"
+      ],
+      "skills": [
+        "LAUNDRY",
+        "CHILD_CARE",
+        "DISH_WASHING"
+      ],
+      "hourlyRate": 160.0,
+      "rating": 0.0,
+      "ratingCount": 0
+    },
+    {
+      "id": "44964bce-25f0-4285-a6a4-316f09e02d79",
+      "name": "Sanjay Yadav_258",
+      "gender": "MALE",
+      "localities": [
+        "Indiranagar"
+      ],
+      "skills": [
+        "CLEANING",
+        "CHILD_CARE",
+        "DISH_WASHING"
+      ],
+      "hourlyRate": 470.0,
       "rating": 0.0,
       "ratingCount": 0
     }
