@@ -83,6 +83,11 @@ public class BookingService {
         }
     }
 
+    /**
+     * Total 9 DB calls in instant
+     * 7 - Scheduled
+     *  About 3 series-level operations, plus about 7 per created occurrence
+     */
     public BookingResponse createBooking(BookingRequest request) {
         return createBooking(request, BookingType.SCHEDULED);
     }
@@ -90,7 +95,9 @@ public class BookingService {
     /*
     * Here currently we are just focusing on next possible slot instant booking.
     * Travel time for househelp is not considered here.
-    *
+    * Currently implemented in a strategy where checking availability first and then moving to the booking
+    * this lead to 2 DB calls in booking flow itself
+    * total 9 DB Calls
     * */
     public BookingResponse createInstantBooking(InstantBookingRequest request) {
         requireCustomer(request.getCustomerId());
@@ -291,6 +298,7 @@ public class BookingService {
         }
     }
 
+    // Can be optimized to a single query with a status check, but this is safer in case of concurrent updates.
     private HelperAvailability findAvailableSlot(String locality,
                                                   SkillType skill,
                                                   LocalDate bookingDate,

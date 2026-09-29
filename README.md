@@ -62,7 +62,7 @@ For production, configure `HOUSEHELPER_ENCRYPTION_KEY` with a securely managed, 
 * **Optimistic Locking & Concurrency (`@Version`):**
   * Slot status transitions rely on JPA `@Version` columns with automatic retries (`withOptimisticRetries`). This avoids heavy pessimistic database locks on read-heavy helper candidate queries.
 * **Bulk Testing Results:**
-  * Tested live under concurrent multi-user load with 100+ customers, 500+ helpers, and 1,000+ slots. Handled 50 concurrent booking workflows smoothly without database deadlocks.
+  * Tested live under concurrent multi-user load with 100+ customers, 50+ helpers, and 100+ slots. Handled 5 concurrent booking workflows smoothly without database deadlocks.
 
 ### 3. Future Query Optimization Roadmap
 
