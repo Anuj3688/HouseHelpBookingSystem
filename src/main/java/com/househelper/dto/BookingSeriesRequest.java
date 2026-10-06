@@ -1,7 +1,9 @@
 package com.househelper.dto;
 
-import com.househelper.model.SkillType;
+import com.househelper.model.BookingType;
 import com.househelper.model.PaymentMethod;
+import com.househelper.model.SkillType;
+import com.househelper.service.booking.BookingCommand;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -15,7 +17,7 @@ import java.util.Set;
 import java.util.UUID;
 
 @Data
-public class BookingSeriesRequest {
+public class BookingSeriesRequest implements BookingCommand {
 
     @NotNull
     private UUID customerId;
@@ -44,4 +46,9 @@ public class BookingSeriesRequest {
     private Integer occurrenceCount;
 
     private Set<DayOfWeek> recurrenceDays;
+
+    @Override
+    public BookingType getBookingType() {
+        return BookingType.RECURRING;
+    }
 }

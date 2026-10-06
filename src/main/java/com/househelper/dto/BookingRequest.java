@@ -1,7 +1,9 @@
 package com.househelper.dto;
 
+import com.househelper.model.BookingType;
 import com.househelper.model.SkillType;
 import com.househelper.model.PaymentMethod;
+import com.househelper.service.booking.BookingCommand;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -17,7 +19,7 @@ import java.util.UUID;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class BookingRequest {
+public class BookingRequest implements BookingCommand {
 
     @NotNull
     private UUID customerId;
@@ -39,4 +41,12 @@ public class BookingRequest {
 
     @NotNull
     private PaymentMethod paymentMethod;
+
+    @Builder.Default
+    private BookingType bookingType = BookingType.SCHEDULED;
+
+    @Override
+    public BookingType getBookingType() {
+        return bookingType != null ? bookingType : BookingType.SCHEDULED;
+    }
 }
