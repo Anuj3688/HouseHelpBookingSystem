@@ -2,21 +2,28 @@ package com.househelper.service;
 
 import com.househelper.config.SearchProperties;
 import com.househelper.dto.AvailabilityRequest;
+import com.househelper.dto.EmergencyCancelResponse;
+import com.househelper.dto.HelperEmergencyCancelRequest;
 import com.househelper.dto.HelperOnboardRequest;
 import com.househelper.dto.HelperRatingRequest;
 import com.househelper.dto.HelperRatingResponse;
 import com.househelper.dto.HelperSearchCriteria;
 import com.househelper.dto.HelperSearchResponse;
+import com.househelper.dto.HelperSingleBookingCancelRequest;
+import com.househelper.dto.ReassignmentTaskResponse;
 import com.househelper.exception.ConflictException;
 import com.househelper.exception.InvalidRequestException;
 import com.househelper.exception.ResourceNotFoundException;
 import com.househelper.model.AvailabilityStatus;
+import com.househelper.model.Booking;
+import com.househelper.model.BookingStatus;
 import com.househelper.model.Helper;
 import com.househelper.model.HelperAvailability;
+import com.househelper.model.ReassignmentTask;
+import com.househelper.repository.BookingRepository;
 import com.househelper.repository.HelperAvailabilityRepository;
 import com.househelper.repository.HelperRepository;
 import com.househelper.repository.HelperSpecifications;
-import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -27,8 +34,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -38,6 +48,8 @@ public class HelperService {
 
     private final HelperRepository helperRepository;
     private final HelperAvailabilityRepository availabilityRepository;
+    private final BookingRepository bookingRepository;
+    private final ReassignmentQueueService reassignmentQueueService;
     private final EventPublisherService eventPublisherService;
     private final SearchProperties searchProperties;
     private final Clock clock;
@@ -79,7 +91,7 @@ public class HelperService {
                             .startTime(request.getStartTime())
                             .build());
 
-            //For Booking Cancellation we have another flow.
+            // For Booking Cancellation we have another flow.
             if (availability.getStatus() == AvailabilityStatus.BOOKED) {
                 log.error("A booked availability slot cannot be changed by helper availability updates. helperId={}, slotDate={}, startTime={}", helperId, request.getSlotDate(), request.getStartTime());
                 throw new ConflictException("A booked availability slot cannot be changed by helper availability updates.");
@@ -94,6 +106,112 @@ public class HelperService {
                 helperId.toString(), helperId, null, null, null,
                 null, Map.of("helperId", helperId, "slotsUpdated", updatedCount, "slots", requests));
         return updatedCount;
+    }
+
+    @Transactional
+    public ReassignmentTaskResponse cancelBookingByHelper(UUID helperId, UUID bookingId, HelperSingleBookingCancelRequest request) {
+        Helper helper = helperRepository.findById(helperId)
+                .orElseThrow(() -> new ResourceNotFoundException("Helper " + helperId + " was not found."));
+
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new ResourceNotFoundException("Booking " + bookingId + " was not found."));
+
+        if (!booking.getAssignedHelperId().equals(helperId)) {
+            throw new InvalidRequestException("Booking " + bookingId + " is not assigned to helper " + helperId + ".");
+        }
+
+        if (booking.getStatus() == BookingStatus.CANCELLED) {
+            throw new ConflictException("Booking " + bookingId + " is already cancelled.");
+        }
+        if (booking.getStatus() == BookingStatus.COMPLETED) {
+            throw new ConflictException("Cannot cancel a booking that is already completed.");
+        }
+
+        // Mark helper's availability slots for this booking as NOT_AVAILABLE so helper cannot be re-booked
+        List<HelperAvailability> slots = availabilityRepository.findSlotsInWindow(
+                helperId, booking.getBookingDate(), booking.getStartTime(), booking.getEndTime(), AvailabilityStatus.BOOKED);
+        for (HelperAvailability slot : slots) {
+            slot.setStatus(AvailabilityStatus.NOT_AVAILABLE);
+        }
+        availabilityRepository.saveAll(slots);
+
+        booking.setStatus(BookingStatus.PENDING_REASSIGNMENT);
+        bookingRepository.save(booking);
+
+        String reason = (request != null && request.getReason() != null && !request.getReason().isBlank())
+                ? request.getReason().trim() : "Cancelled by helper";
+        ReassignmentTask task = reassignmentQueueService.enqueueTask(bookingId, helperId, reason);
+
+        eventPublisherService.publishEvent("HELPER_CANCELLED_BOOKING", "Booking",
+                booking.getId().toString(), helperId, booking.getCustomer().getId(), null, booking.getId(),
+                booking.getBookingSeries() == null ? null : booking.getBookingSeries().getId(),
+                Map.of("bookingId", bookingId, "helperId", helperId, "reason", reason));
+
+        reassignmentQueueService.triggerAsyncProcessing();
+
+        return ReassignmentTaskResponse.builder()
+                .id(task.getId())
+                .bookingId(task.getBookingId())
+                .originalHelperId(task.getOriginalHelperId())
+                .reassignedHelperId(task.getReassignedHelperId())
+                .reason(task.getReason())
+                .status(task.getStatus())
+                .attempts(task.getAttempts())
+                .failureReason(task.getFailureReason())
+                .createdAt(task.getCreatedAt())
+                .updatedAt(task.getUpdatedAt())
+                .build();
+    }
+
+    @Transactional
+    public EmergencyCancelResponse emergencyCancelAllBookings(UUID helperId, HelperEmergencyCancelRequest request) {
+        Helper helper = helperRepository.findById(helperId)
+                .orElseThrow(() -> new ResourceNotFoundException("Helper " + helperId + " was not found."));
+
+        LocalDate today = LocalDate.now(clock);
+        LocalDate fromDate = (request != null && request.getFromDate() != null) ? request.getFromDate() : today;
+        LocalDate toDate = (request != null && request.getToDate() != null) ? request.getToDate() : today.plusYears(1);
+
+        if (toDate.isBefore(fromDate)) {
+            throw new InvalidRequestException("Emergency leave end date must not be before start date.");
+        }
+
+        // 1. Mark all helper availability slots in this date range as NOT_AVAILABLE
+        List<HelperAvailability> slots = availabilityRepository.findByHelperIdAndSlotDateBetween(helperId, fromDate, toDate);
+        for (HelperAvailability slot : slots) {
+            slot.setStatus(AvailabilityStatus.NOT_AVAILABLE);
+        }
+        availabilityRepository.saveAll(slots);
+
+        // 2. Find all active bookings for this helper in this date range
+        List<Booking> activeBookings = bookingRepository.findByAssignedHelperIdAndStatusInAndBookingDateBetween(
+                helperId, List.of(BookingStatus.CONFIRMED, BookingStatus.PENDING_PAYMENT), fromDate, toDate);
+
+        List<UUID> cancelledBookingIds = new ArrayList<>();
+        String reason = (request != null && request.getReason() != null && !request.getReason().isBlank())
+                ? request.getReason().trim() : "Emergency mass cancellation by helper";
+
+        for (Booking booking : activeBookings) {
+            booking.setStatus(BookingStatus.PENDING_REASSIGNMENT);
+            bookingRepository.save(booking);
+            reassignmentQueueService.enqueueTask(booking.getId(), helperId, reason);
+            cancelledBookingIds.add(booking.getId());
+        }
+
+        eventPublisherService.publishEvent("HELPER_EMERGENCY_MASS_CANCEL", "Helper",
+                helperId.toString(), helperId, null, null, null, null,
+                Map.of("helperId", helperId, "fromDate", fromDate, "toDate", toDate,
+                        "cancelledBookingsCount", cancelledBookingIds.size(), "reason", reason));
+
+        reassignmentQueueService.triggerAsyncProcessing();
+
+        return EmergencyCancelResponse.builder()
+                .helperId(helperId)
+                .totalBookingsCancelled(cancelledBookingIds.size())
+                .cancelledBookingIds(cancelledBookingIds)
+                .tasksEnqueued(cancelledBookingIds.size())
+                .message("Emergency leave applied. " + cancelledBookingIds.size() + " bookings marked for reassignment.")
+                .build();
     }
 
     private void validateAvailabilityRequest(AvailabilityRequest request) {
@@ -130,6 +248,11 @@ public class HelperService {
         }
         if (!criteria.getEndTime().isAfter(criteria.getStartTime())) {
             throw new InvalidRequestException("Search end time must be later than start time.");
+        }
+        if (criteria.getStartTime().getMinute() != 0 || criteria.getStartTime().getSecond() != 0
+                || criteria.getEndTime().getMinute() != 0 || criteria.getEndTime().getSecond() != 0) {
+            throw new InvalidRequestException(
+                    "Search times must start and end on the hour (e.g. 09:00, 10:00). Fractional durations such as 15 or 30 minutes are not permitted.");
         }
 
         PageRequest pageable = PageRequest.of(criteria.getPage(), criteria.getSize());

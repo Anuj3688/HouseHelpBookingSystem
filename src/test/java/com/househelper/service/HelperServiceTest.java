@@ -2,19 +2,29 @@ package com.househelper.service;
 
 import com.househelper.config.SearchProperties;
 import com.househelper.dto.AvailabilityRequest;
+import com.househelper.dto.EmergencyCancelResponse;
+import com.househelper.dto.HelperEmergencyCancelRequest;
 import com.househelper.dto.HelperOnboardRequest;
 import com.househelper.dto.HelperRatingRequest;
 import com.househelper.dto.HelperRatingResponse;
 import com.househelper.dto.HelperSearchCriteria;
 import com.househelper.dto.HelperSearchResponse;
+import com.househelper.dto.HelperSingleBookingCancelRequest;
+import com.househelper.dto.ReassignmentTaskResponse;
 import com.househelper.exception.ConflictException;
 import com.househelper.exception.InvalidRequestException;
 import com.househelper.exception.ResourceNotFoundException;
 import com.househelper.model.AvailabilityStatus;
+import com.househelper.model.Booking;
+import com.househelper.model.BookingStatus;
+import com.househelper.model.Customer;
 import com.househelper.model.Gender;
 import com.househelper.model.Helper;
 import com.househelper.model.HelperAvailability;
+import com.househelper.model.ReassignmentTask;
+import com.househelper.model.ReassignmentTaskStatus;
 import com.househelper.model.SkillType;
+import com.househelper.repository.BookingRepository;
 import com.househelper.repository.HelperAvailabilityRepository;
 import com.househelper.repository.HelperRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,6 +51,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -58,6 +69,7 @@ class HelperServiceTest {
     }
 
     private static final UUID HELPER_ID = uuid(25);
+    private static final UUID BOOKING_ID = uuid(70);
     private static final LocalDate SLOT_DATE = LocalDate.of(2026, 10, 5);
     private static final LocalTime SLOT_START = LocalTime.of(9, 0);
     private static final LocalTime SLOT_END = LocalTime.of(10, 0);
@@ -67,6 +79,12 @@ class HelperServiceTest {
 
     @Mock
     private HelperAvailabilityRepository availabilityRepository;
+
+    @Mock
+    private BookingRepository bookingRepository;
+
+    @Mock
+    private ReassignmentQueueService reassignmentQueueService;
 
     @Mock
     private EventPublisherService eventPublisherService;
@@ -80,6 +98,7 @@ class HelperServiceTest {
         searchProperties = new SearchProperties();
         searchProperties.setMaxPageSize(100);
         helperService = new HelperService(helperRepository, availabilityRepository,
+                bookingRepository, reassignmentQueueService,
                 eventPublisherService, searchProperties,
                 Clock.fixed(Instant.parse("2026-09-27T12:00:00Z"), ZoneOffset.UTC));
     }
@@ -300,6 +319,24 @@ class HelperServiceTest {
     }
 
     @Test
+    @DisplayName("Rejects helper searches whose start time has fractional minutes")
+    void searchHelpersFractionalStartTime() {
+        HelperSearchCriteria criteria = searchCriteria(0, 10, LocalTime.of(9, 15), LocalTime.of(10, 15));
+
+        assertThrows(InvalidRequestException.class, () -> helperService.searchHelpers(criteria));
+        verifyNoInteractions(helperRepository);
+    }
+
+    @Test
+    @DisplayName("Rejects helper searches whose end time has fractional minutes")
+    void searchHelpersFractionalEndTime() {
+        HelperSearchCriteria criteria = searchCriteria(0, 10, LocalTime.of(9, 0), LocalTime.of(10, 30));
+
+        assertThrows(InvalidRequestException.class, () -> helperService.searchHelpers(criteria));
+        verifyNoInteractions(helperRepository);
+    }
+
+    @Test
     @DisplayName("Rejects helper searches whose requested page size exceeds the configured limit")
     void searchHelpersTooLarge() {
         HelperSearchCriteria criteria = searchCriteria(0, 101, SLOT_START, SLOT_END);
@@ -346,6 +383,135 @@ class HelperServiceTest {
 
         verify(helperRepository, never()).save(any(Helper.class));
         verifyNoInteractions(availabilityRepository, eventPublisherService);
+    }
+
+    @Test
+    @DisplayName("Cancels a single booking by helper, marks slots NOT_AVAILABLE and enqueues reassignment task")
+    void cancelBookingByHelper() {
+        Helper helper = helper(HELPER_ID);
+        Customer customer = Customer.builder().id(uuid(90)).name("Customer").build();
+        Booking booking = Booking.builder()
+                .id(BOOKING_ID)
+                .customer(customer)
+                .assignedHelperId(HELPER_ID)
+                .bookingDate(SLOT_DATE)
+                .startTime(SLOT_START)
+                .endTime(SLOT_END)
+                .status(BookingStatus.CONFIRMED)
+                .build();
+
+        HelperAvailability bookedSlot = HelperAvailability.builder()
+                .id(uuid(301))
+                .helper(helper)
+                .slotDate(SLOT_DATE)
+                .startTime(SLOT_START)
+                .endTime(SLOT_END)
+                .status(AvailabilityStatus.BOOKED)
+                .build();
+
+        ReassignmentTask task = ReassignmentTask.builder()
+                .id(uuid(500))
+                .bookingId(BOOKING_ID)
+                .originalHelperId(HELPER_ID)
+                .status(ReassignmentTaskStatus.PENDING)
+                .reason("Sudden fever")
+                .createdAt(Instant.now())
+                .build();
+
+        when(helperRepository.findById(HELPER_ID)).thenReturn(Optional.of(helper));
+        when(bookingRepository.findById(BOOKING_ID)).thenReturn(Optional.of(booking));
+        when(availabilityRepository.findSlotsInWindow(HELPER_ID, SLOT_DATE, SLOT_START, SLOT_END, AvailabilityStatus.BOOKED))
+                .thenReturn(List.of(bookedSlot));
+        when(reassignmentQueueService.enqueueTask(BOOKING_ID, HELPER_ID, "Sudden fever"))
+                .thenReturn(task);
+
+        HelperSingleBookingCancelRequest cancelRequest = new HelperSingleBookingCancelRequest("Sudden fever");
+        ReassignmentTaskResponse response = helperService.cancelBookingByHelper(HELPER_ID, BOOKING_ID, cancelRequest);
+
+        assertNotNull(response);
+        assertEquals(uuid(500), response.getId());
+        assertEquals(BookingStatus.PENDING_REASSIGNMENT, booking.getStatus());
+        assertEquals(AvailabilityStatus.NOT_AVAILABLE, bookedSlot.getStatus());
+
+        verify(availabilityRepository).saveAll(List.of(bookedSlot));
+        verify(bookingRepository).save(booking);
+        verify(reassignmentQueueService).triggerAsyncProcessing();
+    }
+
+    @Test
+    @DisplayName("Rejects helper cancellation when booking belongs to a different helper")
+    void cancelBookingByHelperMismatch() {
+        Helper helper = helper(HELPER_ID);
+        Customer customer = Customer.builder().id(uuid(90)).name("Customer").build();
+        Booking booking = Booking.builder()
+                .id(BOOKING_ID)
+                .customer(customer)
+                .assignedHelperId(uuid(999)) // Different helper
+                .status(BookingStatus.CONFIRMED)
+                .build();
+
+        when(helperRepository.findById(HELPER_ID)).thenReturn(Optional.of(helper));
+        when(bookingRepository.findById(BOOKING_ID)).thenReturn(Optional.of(booking));
+
+        assertThrows(InvalidRequestException.class, () ->
+                helperService.cancelBookingByHelper(HELPER_ID, BOOKING_ID, new HelperSingleBookingCancelRequest("Sick")));
+    }
+
+    @Test
+    @DisplayName("Emergency mass cancellation marks all slots NOT_AVAILABLE and enqueues all active bookings")
+    void emergencyCancelAllBookings() {
+        Helper helper = helper(HELPER_ID);
+        LocalDate fromDate = LocalDate.of(2026, 10, 1);
+        LocalDate toDate = LocalDate.of(2026, 10, 5);
+
+        HelperAvailability slot = HelperAvailability.builder()
+                .id(uuid(101))
+                .helper(helper)
+                .slotDate(fromDate)
+                .status(AvailabilityStatus.AVAILABLE)
+                .build();
+
+        Customer customer = Customer.builder().id(uuid(90)).name("Customer").build();
+        Booking booking = Booking.builder()
+                .id(BOOKING_ID)
+                .customer(customer)
+                .assignedHelperId(HELPER_ID)
+                .bookingDate(fromDate)
+                .status(BookingStatus.CONFIRMED)
+                .build();
+
+        when(helperRepository.findById(HELPER_ID)).thenReturn(Optional.of(helper));
+        when(availabilityRepository.findByHelperIdAndSlotDateBetween(HELPER_ID, fromDate, toDate))
+                .thenReturn(List.of(slot));
+        when(bookingRepository.findByAssignedHelperIdAndStatusInAndBookingDateBetween(
+                eq(HELPER_ID), any(), eq(fromDate), eq(toDate)))
+                .thenReturn(List.of(booking));
+
+        HelperEmergencyCancelRequest cancelRequest = new HelperEmergencyCancelRequest(fromDate, toDate, "Family emergency");
+        EmergencyCancelResponse response = helperService.emergencyCancelAllBookings(HELPER_ID, cancelRequest);
+
+        assertNotNull(response);
+        assertEquals(HELPER_ID, response.getHelperId());
+        assertEquals(1, response.getTotalBookingsCancelled());
+        assertEquals(1, response.getTasksEnqueued());
+        assertEquals(AvailabilityStatus.NOT_AVAILABLE, slot.getStatus());
+        assertEquals(BookingStatus.PENDING_REASSIGNMENT, booking.getStatus());
+
+        verify(reassignmentQueueService).enqueueTask(BOOKING_ID, HELPER_ID, "Family emergency");
+        verify(reassignmentQueueService).triggerAsyncProcessing();
+    }
+
+    @Test
+    @DisplayName("Rejects emergency cancellation when end date is earlier than start date")
+    void emergencyCancelInvalidDates() {
+        Helper helper = helper(HELPER_ID);
+        when(helperRepository.findById(HELPER_ID)).thenReturn(Optional.of(helper));
+
+        HelperEmergencyCancelRequest cancelRequest = new HelperEmergencyCancelRequest(
+                LocalDate.of(2026, 10, 5), LocalDate.of(2026, 10, 1), "Invalid");
+
+        assertThrows(InvalidRequestException.class, () ->
+                helperService.emergencyCancelAllBookings(HELPER_ID, cancelRequest));
     }
 
     private HelperOnboardRequest onboardRequest(Set<String> localities, Set<SkillType> skills) {

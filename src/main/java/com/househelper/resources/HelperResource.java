@@ -1,25 +1,31 @@
 package com.househelper.resources;
 
 import com.househelper.dto.AvailabilityRequest;
+import com.househelper.dto.EmergencyCancelResponse;
+import com.househelper.dto.HelperEmergencyCancelRequest;
 import com.househelper.dto.HelperOnboardRequest;
 import com.househelper.dto.HelperRatingRequest;
 import com.househelper.dto.HelperRatingResponse;
 import com.househelper.dto.HelperSearchCriteria;
 import com.househelper.dto.HelperSearchResponse;
+import com.househelper.dto.HelperSingleBookingCancelRequest;
+import com.househelper.dto.ReassignmentTaskResponse;
 import com.househelper.service.HelperService;
-import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.bind.annotation.PutMapping;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -64,5 +70,26 @@ public class HelperResource {
     public Page<HelperSearchResponse> searchHelpers(
             @Valid @ModelAttribute HelperSearchCriteria criteria) {
         return helperService.searchHelpers(criteria);
+    }
+
+    @PostMapping("/{helperId}/bookings/{bookingId}/cancel")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    @Operation(summary = "Cancel a specific booking by helper",
+            description = "Cancels a specific booking by the assigned helper, frees the slot from the helper, and queues for substitute reassignment.")
+    public ReassignmentTaskResponse cancelBookingByHelper(
+            @PathVariable UUID helperId,
+            @PathVariable UUID bookingId,
+            @RequestBody(required = false) HelperSingleBookingCancelRequest request) {
+        return helperService.cancelBookingByHelper(helperId, bookingId, request);
+    }
+
+    @PostMapping("/{helperId}/emergency-cancel")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    @Operation(summary = "Emergency mass cancellation by helper",
+            description = "Cancels all active bookings for the helper across the emergency leave period, marks helper slots as NOT_AVAILABLE, and queues all bookings for seamless substitute reassignment.")
+    public EmergencyCancelResponse emergencyCancelAllBookings(
+            @PathVariable UUID helperId,
+            @RequestBody(required = false) HelperEmergencyCancelRequest request) {
+        return helperService.emergencyCancelAllBookings(helperId, request);
     }
 }

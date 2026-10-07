@@ -31,20 +31,20 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.Duration;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.function.Supplier;
-import java.util.UUID;
 
 @Service
 @Slf4j
@@ -86,7 +86,7 @@ public class BookingService {
     /**
      * Total 9 DB calls in instant
      * 7 - Scheduled
-     *  About 3 series-level operations, plus about 7 per created occurrence
+     * About 3 series-level operations, plus about 7 per created occurrence
      */
     public BookingResponse createBooking(BookingRequest request) {
         return createBooking(request, BookingType.SCHEDULED);
@@ -156,13 +156,48 @@ public class BookingService {
     }
 
     @Transactional
+    public BookingResponse completeBooking(UUID bookingId) {
+        Booking booking = requireBooking(bookingId);
+        if (booking.getStatus() == BookingStatus.CANCELLED) {
+            throw new ConflictException("Cannot complete a cancelled booking.");
+        }
+        if (booking.getStatus() == BookingStatus.COMPLETED) {
+            return toResponse(booking);
+        }
+        if (booking.getStatus() != BookingStatus.CONFIRMED) {
+            throw new InvalidRequestException("Only confirmed bookings can be marked as completed.");
+        }
+
+        booking.setStatus(BookingStatus.COMPLETED);
+        bookingRepository.save(booking);
+
+        eventPublisherService.publishEvent("BOOKING_COMPLETED", "Booking",
+                booking.getId().toString(), booking.getAssignedHelperId(), booking.getCustomer().getId(),
+                null, booking.getId(),
+                booking.getBookingSeries() == null ? null : booking.getBookingSeries().getId(),
+                toResponse(booking));
+
+        return toResponse(booking);
+    }
+
+    @Transactional(readOnly = true)
+    public Booking getBooking(UUID bookingId) {
+        return requireBooking(bookingId);
+    }
+
+    @Transactional(readOnly = true)
+    public BookingResponse getBookingDetails(UUID bookingId) {
+        return toResponse(requireBooking(bookingId));
+    }
+
+    @Transactional
     public void cancelBookingAfterPaymentFailure(UUID bookingId, UUID failedPaymentId) {
         Booking booking = requireBooking(bookingId);
         if (booking.getStatus() == BookingStatus.CANCELLED) {
             return;
         }
 
-        releaseCurrentSlot(booking);
+        releaseCurrentSlots(booking);
         booking.setStatus(BookingStatus.CANCELLED);
         bookingRepository.save(booking);
 
@@ -220,13 +255,15 @@ public class BookingService {
                                                        BookingType bookingType) {
         Customer customer = requireCustomer(request.getCustomerId());
 
-        HelperAvailability slot = findAvailableSlot(
+        List<HelperAvailability> slots = findAvailableSlots(
                 request.getLocality().trim(), request.getSkill(), request.getBookingDate(),
                 request.getStartTime(), request.getEndTime(), "No helper is available for the requested slot.");
 
-        slot.setStatus(AvailabilityStatus.BOOKED);
+        for (HelperAvailability slot : slots) {
+            slot.setStatus(AvailabilityStatus.BOOKED);
+        }
 
-        Helper helper = slot.getHelper();
+        Helper helper = slots.get(0).getHelper();
         BigDecimal amount = calculateAmount(helper.getHourlyRate(), request.getStartTime(), request.getEndTime());
         Booking booking = Booking.builder()
                 .customer(customer)
@@ -256,17 +293,19 @@ public class BookingService {
         Booking booking = requireBooking(bookingId);
         validateCanReschedule(booking, request);
 
-        HelperAvailability newSlot = findAvailableSlot(
+        List<HelperAvailability> newSlots = findAvailableSlots(
                 booking.getLocality(), booking.getSkill(), request.getNewBookingDate(),
                 request.getNewStartTime(), request.getNewEndTime(),
                 "No helper is available for the requested reschedule slot.");
-        newSlot.setStatus(AvailabilityStatus.BOOKED);
-        releaseCurrentSlot(booking);
+        for (HelperAvailability slot : newSlots) {
+            slot.setStatus(AvailabilityStatus.BOOKED);
+        }
+        releaseCurrentSlots(booking);
 
-        BigDecimal newAmount = calculateAmount(newSlot.getHelper().getHourlyRate(),
+        BigDecimal newAmount = calculateAmount(newSlots.get(0).getHelper().getHourlyRate(),
                 request.getNewStartTime(), request.getNewEndTime());
         BigDecimal delta = newAmount.subtract(BigDecimal.valueOf(booking.getTotalAmount()));
-        updateBookingForReschedule(booking, newSlot, request, newAmount);
+        updateBookingForReschedule(booking, newSlots.get(0), request, newAmount);
         Payment payment = paymentRecordService.createRescheduleAdjustment(bookingId,
                 booking.getBookingSeries() == null ? null : booking.getBookingSeries().getId(), delta);
 
@@ -298,32 +337,52 @@ public class BookingService {
         }
     }
 
-    // Can be optimized to a single query with a status check, but this is safer in case of concurrent updates.
-    private HelperAvailability findAvailableSlot(String locality,
-                                                  SkillType skill,
-                                                  LocalDate bookingDate,
-                                                  LocalTime startTime,
-                                                  LocalTime endTime,
-                                                  String unavailableMessage) {
+    /**
+     * Finds and reserves continuous available hourly slots for a single or multi-hour booking.
+     */
+    private List<HelperAvailability> findAvailableSlots(String locality,
+                                                         SkillType skill,
+                                                         LocalDate bookingDate,
+                                                         LocalTime startTime,
+                                                         LocalTime endTime,
+                                                         String unavailableMessage) {
+        long durationHours = Duration.between(startTime, endTime).toHours();
+        LocalTime firstSlotEnd = startTime.plusHours(1);
+
         List<HelperAvailability> candidates = availabilityRepository.findAvailableHelpersForSlot(
-                locality, skill, bookingDate, startTime, endTime, AvailabilityStatus.AVAILABLE);
+                locality, skill, bookingDate, startTime, firstSlotEnd, AvailabilityStatus.AVAILABLE);
+
         for (HelperAvailability candidate : candidates) {
-            HelperAvailability slot = availabilityRepository.findById(candidate.getId())
-                    .orElseThrow(() -> new SlotUnavailableException(
-                            "The selected availability slot no longer exists."));
-            if (slot.getStatus() == AvailabilityStatus.AVAILABLE) {
-                return slot;
+            List<HelperAvailability> slotsInWindow = availabilityRepository.findSlotsInWindow(
+                    candidate.getHelper().getId(), bookingDate, startTime, endTime, AvailabilityStatus.AVAILABLE);
+
+            if (slotsInWindow.size() == durationHours && isConsecutive(slotsInWindow, startTime, durationHours)) {
+                return slotsInWindow;
             }
         }
         throw new SlotUnavailableException(unavailableMessage);
     }
 
-    private void releaseCurrentSlot(Booking booking) {
-        HelperAvailability slot = availabilityRepository.findByHelperIdAndSlotDateAndStartTime(
-                        booking.getAssignedHelperId(), booking.getBookingDate(), booking.getStartTime())
-                .orElseThrow(() -> new ConflictException(
-                        "The availability slot for booking " + booking.getId() + " was not found."));
-        slot.setStatus(AvailabilityStatus.AVAILABLE);
+    private boolean isConsecutive(List<HelperAvailability> slots, LocalTime startTime, long durationHours) {
+        if (slots.size() != durationHours) {
+            return false;
+        }
+        for (int i = 0; i < slots.size(); i++) {
+            if (!slots.get(i).getStartTime().equals(startTime.plusHours(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private void releaseCurrentSlots(Booking booking) {
+        List<HelperAvailability> bookedSlots = availabilityRepository.findSlotsInWindow(
+                booking.getAssignedHelperId(), booking.getBookingDate(),
+                booking.getStartTime(), booking.getEndTime(), AvailabilityStatus.BOOKED);
+        for (HelperAvailability slot : bookedSlots) {
+            slot.setStatus(AvailabilityStatus.AVAILABLE);
+        }
+        availabilityRepository.saveAll(bookedSlots);
     }
 
     private void updateBookingForReschedule(Booking booking,
@@ -358,7 +417,7 @@ public class BookingService {
             throw new ConflictException("Booking " + bookingId + " is already cancelled.");
         }
 
-        releaseCurrentSlot(booking);
+        releaseCurrentSlots(booking);
         booking.setStatus(BookingStatus.CANCELLED);
 
         List<Payment> payments = paymentRecordService.findPaymentsForBooking(bookingId);
@@ -392,6 +451,15 @@ public class BookingService {
     private void validatePeriod(LocalTime startTime, LocalTime endTime) {
         if (startTime == null || endTime == null || !endTime.isAfter(startTime)) {
             throw new InvalidRequestException("End time must be later than start time.");
+        }
+        if (startTime.getMinute() != 0 || startTime.getSecond() != 0 || startTime.getNano() != 0
+                || endTime.getMinute() != 0 || endTime.getSecond() != 0 || endTime.getNano() != 0) {
+            throw new InvalidRequestException(
+                    "Booking times must start and end on the hour (e.g. 09:00, 10:00). Fractional durations such as 15 or 30 minutes are not permitted.");
+        }
+        long minutes = Duration.between(startTime, endTime).toMinutes();
+        if (minutes < 60 || minutes % 60 != 0) {
+            throw new InvalidRequestException("Booking must have a whole-hour duration of at least 1 hour.");
         }
     }
 

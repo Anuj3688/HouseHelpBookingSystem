@@ -1,13 +1,15 @@
 package com.househelper.resources;
 
+import com.househelper.dto.BookingResponse;
 import com.househelper.dto.CustomerRequest;
 import com.househelper.dto.CustomerResponse;
-import com.househelper.dto.BookingResponse;
+import com.househelper.dto.CustomerReviewRequest;
+import com.househelper.dto.CustomerReviewResponse;
 import com.househelper.service.CustomerService;
-import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -58,7 +60,7 @@ public class CustomerResource {
     }
 
     @PutMapping("/{customerId}")
-    @Operation(summary = "Replace customer details", description = "Updates the customer's name and service address.")
+    @Operation(summary = "Replace customer details", description = "Updates the customer's name, service address, phone, and email.")
     public CustomerResponse updateCustomer(@PathVariable UUID customerId,
                                            @Valid @RequestBody CustomerRequest request) {
         return customerService.updateCustomer(customerId, request);
@@ -69,5 +71,21 @@ public class CustomerResource {
     public ResponseEntity<Void> deleteCustomer(@PathVariable UUID customerId) {
         customerService.deleteCustomer(customerId);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{customerId}/reviews")
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Submit customer review",
+            description = "Allows the assigned helper to rate (1 to 5) and review the customer after service completion.")
+    public CustomerReviewResponse addCustomerReview(@PathVariable UUID customerId,
+                                                    @Valid @RequestBody CustomerReviewRequest request) {
+        return customerService.addCustomerReview(customerId, request);
+    }
+
+    @GetMapping("/{customerId}/reviews")
+    @Operation(summary = "List customer reviews",
+            description = "Returns all reviews submitted by helpers for this customer post service completion.")
+    public List<CustomerReviewResponse> getCustomerReviews(@PathVariable UUID customerId) {
+        return customerService.getCustomerReviews(customerId);
     }
 }

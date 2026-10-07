@@ -18,6 +18,28 @@ public interface HelperAvailabilityRepository extends JpaRepository<HelperAvaila
     Optional<HelperAvailability> findByHelperIdAndSlotDateAndStartTime(
             UUID helperId, LocalDate slotDate, LocalTime startTime);
 
+    List<HelperAvailability> findByHelperIdAndSlotDateBetween(
+            UUID helperId, LocalDate fromDate, LocalDate toDate);
+
+    List<HelperAvailability> findByHelperIdAndSlotDateGreaterThanEqual(
+            UUID helperId, LocalDate fromDate);
+
+    @Query("""
+            select availability from HelperAvailability availability
+            where availability.helper.id = :helperId
+              and availability.slotDate = :slotDate
+              and availability.startTime >= :startTime
+              and availability.endTime <= :endTime
+              and availability.status = :status
+            order by availability.startTime asc
+            """)
+    List<HelperAvailability> findSlotsInWindow(
+            @Param("helperId") UUID helperId,
+            @Param("slotDate") LocalDate slotDate,
+            @Param("startTime") LocalTime startTime,
+            @Param("endTime") LocalTime endTime,
+            @Param("status") AvailabilityStatus status);
+
     @Query("""
             select availability
             from HelperAvailability availability
@@ -31,7 +53,7 @@ public interface HelperAvailabilityRepository extends JpaRepository<HelperAvaila
     List<HelperAvailability> findAllSlotsByStatusWithHelper(@Param("status") AvailabilityStatus status);
 
     @Query("""
-            select availability
+            select distinct availability
             from HelperAvailability availability
             join fetch availability.helper helper
             join helper.localities locality
@@ -55,7 +77,7 @@ public interface HelperAvailabilityRepository extends JpaRepository<HelperAvaila
             @Param("status") AvailabilityStatus status);
 
     @Query("""
-            select availability
+            select distinct availability
             from HelperAvailability availability
             join fetch availability.helper helper
             join helper.localities locality

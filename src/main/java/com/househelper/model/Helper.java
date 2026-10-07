@@ -24,6 +24,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
+import org.hibernate.annotations.BatchSize;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -59,6 +60,7 @@ public class Helper {
     @ElementCollection
     @CollectionTable(name = "helper_localities", joinColumns = @JoinColumn(name = "helper_id"))
     @Column(name = "locality", nullable = false)
+    @BatchSize(size = 30)
     @Builder.Default
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
@@ -68,6 +70,7 @@ public class Helper {
     @CollectionTable(name = "helper_skills", joinColumns = @JoinColumn(name = "helper_id"))
     @Enumerated(EnumType.STRING)
     @Column(name = "skill", nullable = false)
+    @BatchSize(size = 30)
     @Builder.Default
     @ToString.Exclude
     @EqualsAndHashCode.Exclude

@@ -29,16 +29,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.SimpleTransactionStatus;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.LocalTime;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
@@ -122,7 +121,9 @@ class BookingServiceTest {
                 "Central", SkillType.CLEANING, INSTANT_BOOKING_DATE,
                 LocalTime.of(11, 0), LocalTime.of(12, 0),
                 AvailabilityStatus.AVAILABLE)).thenReturn(List.of(elevenOClock));
-        when(availabilityRepository.findById(uuid(53))).thenReturn(Optional.of(elevenOClock));
+        when(availabilityRepository.findSlotsInWindow(
+                HELPER_ID, INSTANT_BOOKING_DATE, LocalTime.of(11, 0), LocalTime.of(12, 0), AvailabilityStatus.AVAILABLE))
+                .thenReturn(List.of(elevenOClock));
         when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> {
             Booking saved = invocation.getArgument(0);
             saved.setId(BOOKING_ID);
@@ -154,7 +155,9 @@ class BookingServiceTest {
         when(availabilityRepository.findAvailableHelpersForSlot(
                 "Central", SkillType.CLEANING, BOOKING_DATE, START_TIME, END_TIME, AvailabilityStatus.AVAILABLE))
                 .thenReturn(List.of(slot));
-        when(availabilityRepository.findById(uuid(51))).thenReturn(Optional.of(slot));
+        when(availabilityRepository.findSlotsInWindow(
+                HELPER_ID, BOOKING_DATE, START_TIME, END_TIME, AvailabilityStatus.AVAILABLE))
+                .thenReturn(List.of(slot));
         when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> {
             Booking saved = invocation.getArgument(0);
             saved.setId(BOOKING_ID);
@@ -208,7 +211,9 @@ class BookingServiceTest {
         when(availabilityRepository.findAvailableHelpersForSlot(
                 "Central", SkillType.CLEANING, BOOKING_DATE, START_TIME, END_TIME, AvailabilityStatus.AVAILABLE))
                 .thenReturn(List.of(slot));
-        when(availabilityRepository.findById(uuid(51))).thenReturn(Optional.of(slot));
+        when(availabilityRepository.findSlotsInWindow(
+                HELPER_ID, BOOKING_DATE, START_TIME, END_TIME, AvailabilityStatus.AVAILABLE))
+                .thenReturn(List.of(slot));
         when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> {
             Booking saved = invocation.getArgument(0);
             saved.setId(BOOKING_ID);
@@ -268,6 +273,120 @@ class BookingServiceTest {
     }
 
     @Test
+    @DisplayName("Rejects a booking when start time has fractional minutes like 15 or 30 mins")
+    void createBookingFractionalStartTime() {
+        BookingRequest request = request(PaymentMethod.CARD);
+        request.setStartTime(LocalTime.of(9, 15));
+        request.setEndTime(LocalTime.of(10, 15));
+
+        assertThrows(InvalidRequestException.class, () -> bookingService.createBooking(request));
+        verifyNoInteractions(bookingRepository, customerRepository, availabilityRepository);
+    }
+
+    @Test
+    @DisplayName("Rejects a booking when end time has fractional minutes like 30 mins")
+    void createBookingFractionalEndTime() {
+        BookingRequest request = request(PaymentMethod.CARD);
+        request.setStartTime(LocalTime.of(9, 0));
+        request.setEndTime(LocalTime.of(9, 30));
+
+        assertThrows(InvalidRequestException.class, () -> bookingService.createBooking(request));
+        verifyNoInteractions(bookingRepository, customerRepository, availabilityRepository);
+    }
+
+    @Test
+    @DisplayName("Successfully creates a 2-hour booking, reserves all consecutive slots, and computes full-hour rate")
+    void createMultiHourBooking() {
+        Customer customer = customer();
+        Helper helper = helper(350.0);
+        LocalTime multiStart = LocalTime.of(9, 0);
+        LocalTime multiEnd = LocalTime.of(11, 0);
+        HelperAvailability slot1 = slot(uuid(51), helper, BOOKING_DATE, LocalTime.of(9, 0), LocalTime.of(10, 0));
+        HelperAvailability slot2 = slot(uuid(52), helper, BOOKING_DATE, LocalTime.of(10, 0), LocalTime.of(11, 0));
+        Payment payment = payment(uuid(71), BOOKING_ID, null, PaymentType.BOOKING_PAYMENT);
+
+        when(customerRepository.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer));
+        when(availabilityRepository.findAvailableHelpersForSlot(
+                "Central", SkillType.CLEANING, BOOKING_DATE, multiStart, LocalTime.of(10, 0), AvailabilityStatus.AVAILABLE))
+                .thenReturn(List.of(slot1));
+        when(availabilityRepository.findSlotsInWindow(
+                HELPER_ID, BOOKING_DATE, multiStart, multiEnd, AvailabilityStatus.AVAILABLE))
+                .thenReturn(List.of(slot1, slot2));
+        when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> {
+            Booking saved = invocation.getArgument(0);
+            saved.setId(BOOKING_ID);
+            return saved;
+        });
+        when(paymentRecordService.createBookingPayment(
+                eq(BOOKING_ID), isNull(),
+                argThat(amount -> amount.compareTo(BigDecimal.valueOf(700.0)) == 0),
+                eq(PaymentMethod.UPI))).thenReturn(payment);
+
+        BookingRequest multiRequest = request(PaymentMethod.UPI);
+        multiRequest.setStartTime(multiStart);
+        multiRequest.setEndTime(multiEnd);
+
+        BookingResponse response = bookingService.createBooking(multiRequest);
+
+        assertEquals(BOOKING_ID, response.getId());
+        assertEquals(700.0, response.getTotalAmount());
+        assertEquals(AvailabilityStatus.BOOKED, slot1.getStatus());
+        assertEquals(AvailabilityStatus.BOOKED, slot2.getStatus());
+    }
+
+    @Test
+    @DisplayName("Rejects multi-hour booking when helper does not have consecutive subsequent slot available")
+    void createMultiHourBookingConsecutiveSlotMissing() {
+        Customer customer = customer();
+        Helper helper = helper(350.0);
+        LocalTime multiStart = LocalTime.of(9, 0);
+        LocalTime multiEnd = LocalTime.of(11, 0);
+        HelperAvailability slot1 = slot(uuid(51), helper, BOOKING_DATE, LocalTime.of(9, 0), LocalTime.of(10, 0));
+
+        when(customerRepository.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer));
+        when(availabilityRepository.findAvailableHelpersForSlot(
+                "Central", SkillType.CLEANING, BOOKING_DATE, multiStart, LocalTime.of(10, 0), AvailabilityStatus.AVAILABLE))
+                .thenReturn(List.of(slot1));
+        when(availabilityRepository.findSlotsInWindow(
+                HELPER_ID, BOOKING_DATE, multiStart, multiEnd, AvailabilityStatus.AVAILABLE))
+                .thenReturn(List.of(slot1)); // Only 1 hour available instead of 2
+
+        BookingRequest multiRequest = request(PaymentMethod.UPI);
+        multiRequest.setStartTime(multiStart);
+        multiRequest.setEndTime(multiEnd);
+
+        assertThrows(SlotUnavailableException.class, () -> bookingService.createBooking(multiRequest));
+    }
+
+    @Test
+    @DisplayName("Releases all consecutive slots when cancelling a multi-hour booking")
+    void cancelMultiHourBooking() {
+        Booking multiBooking = booking(BookingStatus.CONFIRMED, null);
+        multiBooking.setStartTime(LocalTime.of(9, 0));
+        multiBooking.setEndTime(LocalTime.of(11, 0));
+
+        HelperAvailability slot1 = slot(uuid(51), helper(350.0), BOOKING_DATE, LocalTime.of(9, 0), LocalTime.of(10, 0));
+        slot1.setStatus(AvailabilityStatus.BOOKED);
+        HelperAvailability slot2 = slot(uuid(52), helper(350.0), BOOKING_DATE, LocalTime.of(10, 0), LocalTime.of(11, 0));
+        slot2.setStatus(AvailabilityStatus.BOOKED);
+
+        when(bookingRepository.findById(BOOKING_ID)).thenReturn(Optional.of(multiBooking));
+        when(availabilityRepository.findSlotsInWindow(HELPER_ID, BOOKING_DATE, LocalTime.of(9, 0), LocalTime.of(11, 0), AvailabilityStatus.BOOKED))
+                .thenReturn(List.of(slot1, slot2));
+        when(paymentRecordService.findPaymentsForBooking(BOOKING_ID)).thenReturn(List.of());
+        when(paymentRecordService.createCancellationRefund(BOOKING_ID, null, null))
+                .thenReturn(Optional.of(payment(uuid(72), BOOKING_ID, null, PaymentType.CANCEL_REFUND)));
+        when(bookingRepository.save(multiBooking)).thenReturn(multiBooking);
+
+        BookingResponse response = bookingService.cancelBooking(BOOKING_ID);
+
+        assertEquals(BookingStatus.CANCELLED, response.getStatus());
+        assertEquals(AvailabilityStatus.AVAILABLE, slot1.getStatus());
+        assertEquals(AvailabilityStatus.AVAILABLE, slot2.getStatus());
+        verify(availabilityRepository).saveAll(List.of(slot1, slot2));
+    }
+
+    @Test
     @DisplayName("Confirms a pending booking after its payment succeeds")
     void confirmAfterPaymentSuccess() {
         Booking booking = booking(BookingStatus.PENDING_PAYMENT, null);
@@ -307,8 +426,8 @@ class BookingServiceTest {
         Booking booking = booking(BookingStatus.PENDING_PAYMENT, null);
         HelperAvailability slot = slot(uuid(51), helper(350.0), BOOKING_DATE, START_TIME, END_TIME);
         when(bookingRepository.findById(BOOKING_ID)).thenReturn(Optional.of(booking));
-        when(availabilityRepository.findByHelperIdAndSlotDateAndStartTime(HELPER_ID, BOOKING_DATE, START_TIME))
-                .thenReturn(Optional.of(slot));
+        when(availabilityRepository.findSlotsInWindow(HELPER_ID, BOOKING_DATE, START_TIME, END_TIME, AvailabilityStatus.BOOKED))
+                .thenReturn(List.of(slot));
         when(paymentRecordService.createCancellationRefund(BOOKING_ID, null, uuid(71)))
                 .thenReturn(Optional.empty());
 
@@ -330,8 +449,8 @@ class BookingServiceTest {
         HelperAvailability slot = slot(uuid(51), helper(350.0), BOOKING_DATE, START_TIME, END_TIME);
         Payment refund = payment(uuid(72), BOOKING_ID, null, PaymentType.CANCEL_REFUND);
         when(bookingRepository.findById(BOOKING_ID)).thenReturn(Optional.of(booking));
-        when(availabilityRepository.findByHelperIdAndSlotDateAndStartTime(HELPER_ID, BOOKING_DATE, START_TIME))
-                .thenReturn(Optional.of(slot));
+        when(availabilityRepository.findSlotsInWindow(HELPER_ID, BOOKING_DATE, START_TIME, END_TIME, AvailabilityStatus.BOOKED))
+                .thenReturn(List.of(slot));
         when(paymentRecordService.findPaymentsForBooking(BOOKING_ID)).thenReturn(List.of());
         when(paymentRecordService.createCancellationRefund(BOOKING_ID, null, null))
                 .thenReturn(Optional.of(refund));
@@ -373,9 +492,11 @@ class BookingServiceTest {
         when(availabilityRepository.findAvailableHelpersForSlot(
                 "Central", SkillType.CLEANING, newDate, newStart, newEnd, AvailabilityStatus.AVAILABLE))
                 .thenReturn(List.of(newSlot));
-        when(availabilityRepository.findById(uuid(52))).thenReturn(Optional.of(newSlot));
-        when(availabilityRepository.findByHelperIdAndSlotDateAndStartTime(HELPER_ID, BOOKING_DATE, START_TIME))
-                .thenReturn(Optional.of(oldSlot));
+        when(availabilityRepository.findSlotsInWindow(
+                uuid(11), newDate, newStart, newEnd, AvailabilityStatus.AVAILABLE))
+                .thenReturn(List.of(newSlot));
+        when(availabilityRepository.findSlotsInWindow(HELPER_ID, BOOKING_DATE, START_TIME, END_TIME, AvailabilityStatus.BOOKED))
+                .thenReturn(List.of(oldSlot));
         when(paymentRecordService.createRescheduleAdjustment(
                 eq(BOOKING_ID), isNull(),
                 argThat(amount -> amount.compareTo(BigDecimal.valueOf(50.0)) == 0))).thenReturn(adjustment);
@@ -393,6 +514,42 @@ class BookingServiceTest {
         verify(paymentRecordService).createRescheduleAdjustment(
                 eq(BOOKING_ID), isNull(),
                 argThat(amount -> amount.compareTo(BigDecimal.valueOf(50.0)) == 0));
+    }
+
+    @Test
+    @DisplayName("Marks a confirmed booking as completed")
+    void completeBookingSuccess() {
+        Booking booking = booking(BookingStatus.CONFIRMED, null);
+        when(bookingRepository.findById(BOOKING_ID)).thenReturn(Optional.of(booking));
+        when(bookingRepository.save(any(Booking.class))).thenReturn(booking);
+
+        BookingResponse response = bookingService.completeBooking(BOOKING_ID);
+
+        assertEquals(BookingStatus.COMPLETED, response.getStatus());
+        verify(bookingRepository).save(booking);
+        verify(eventPublisherService).publishEvent(
+                eq("BOOKING_COMPLETED"), eq("Booking"), eq(BOOKING_ID.toString()),
+                eq(HELPER_ID), eq(CUSTOMER_ID), isNull(), eq(BOOKING_ID), isNull(), any());
+    }
+
+    @Test
+    @DisplayName("Rejects completing a cancelled booking")
+    void completeBookingCancelled() {
+        Booking booking = booking(BookingStatus.CANCELLED, null);
+        when(bookingRepository.findById(BOOKING_ID)).thenReturn(Optional.of(booking));
+
+        assertThrows(ConflictException.class, () -> bookingService.completeBooking(BOOKING_ID));
+        verify(bookingRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Rejects completing a booking that is still pending payment")
+    void completeBookingPendingPayment() {
+        Booking booking = booking(BookingStatus.PENDING_PAYMENT, null);
+        when(bookingRepository.findById(BOOKING_ID)).thenReturn(Optional.of(booking));
+
+        assertThrows(InvalidRequestException.class, () -> bookingService.completeBooking(BOOKING_ID));
+        verify(bookingRepository, never()).save(any());
     }
 
     @Test

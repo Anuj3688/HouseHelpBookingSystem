@@ -14,6 +14,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -48,6 +49,24 @@ public class BookingResource {
     public BookingResult createBooking(@Valid @RequestBody UnifiedBookingRequest request) {
         return bookingStrategyRegistry.getStrategy(request.getBookingType())
                 .execute(request);
+    }
+
+    /**
+     * Get details of an individual booking.
+     */
+    @GetMapping("/bookings/{bookingId}")
+    @Operation(summary = "Get a booking", description = "Returns details of an individual booking by ID.")
+    public BookingResponse getBooking(@PathVariable UUID bookingId) {
+        return bookingService.getBookingDetails(bookingId);
+    }
+
+    /**
+     * Complete a booking after service has been delivered.
+     */
+    @PostMapping("/bookings/{bookingId}/complete")
+    @Operation(summary = "Complete a booking", description = "Marks a confirmed booking as completed post service delivery.")
+    public BookingResponse completeBooking(@PathVariable UUID bookingId) {
+        return bookingService.completeBooking(bookingId);
     }
 
     /**
